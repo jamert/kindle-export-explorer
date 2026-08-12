@@ -53,6 +53,14 @@ uv run kindle-books --jsonl /path/to/Kindle > books.jsonl
 uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 ```
 
+Select one or more records with a comma-separated, case-insensitive ASIN filter. It
+works with both TSV and JSON Lines output:
+
+```console
+uv run kindle-books --asin B00B7NPRY8,B008T9L6AM /path/to/Kindle
+uv run kindle-books --jsonl --asin B00B7NPRY8 /path/to/Kindle
+```
+
 Raw columns are namespaced by dataset (for example,
 `raw.ownership.resource.resourceType` and `raw.library.relationship.Our Price`). When
 several source records provide different values, the values are joined with `; `.

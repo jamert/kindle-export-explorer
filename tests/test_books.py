@@ -265,6 +265,42 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert record["raw.ownership.resource.resourceType"] == "KindleEBookSample"
 
 
+def test_asin_filter_works_with_tsv_and_jsonl(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    for number, asin in enumerate(("BOOK1", "BOOK2", "BOOK3"), 1):
+        (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
+            json.dumps(
+                {
+                    "resource": {
+                        "ASIN": asin,
+                        "Product Name": f"Title {number}",
+                        "resourceType": "KindleEBook",
+                    },
+                    "rights": [{"origin": {"originType": "Purchase"}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    runner = CliRunner()
+    tsv_result = runner.invoke(main, ["--asin", " book1,BOOK3 ", str(tmp_path)])
+    assert tsv_result.exit_code == 0
+    tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
+    assert {row["asin"] for row in tsv_rows} == {"BOOK1", "BOOK3"}
+
+    json_result = runner.invoke(
+        main, ["--jsonl", "--asin", "BOOK2,missing", str(tmp_path)]
+    )
+    assert json_result.exit_code == 0
+    json_rows = [json.loads(line) for line in json_result.output.splitlines()]
+    assert [row["asin"] for row in json_rows] == ["BOOK2"]
+
+    empty_result = runner.invoke(main, ["--asin", " , ", str(tmp_path)])
+    assert empty_result.exit_code != 0
+    assert "provide at least one ASIN" in empty_result.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,
