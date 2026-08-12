@@ -41,6 +41,7 @@ class Book:
     genres: set[str] = field(default_factory=set)
     series_title: str = ""
     series_position: str = ""
+    source: str = "kindle"
     is_sample: bool = False
     is_default_content: bool = field(default=False, repr=False)
     _title_rank: int = field(default=-1, repr=False)
@@ -72,6 +73,7 @@ class Book:
             "; ".join(sorted(self.genres, key=str.casefold)),
             self.series_title,
             self.series_position,
+            self.source,
             "true" if self.is_sample else "false",
         ]
 
@@ -84,6 +86,7 @@ HEADERS = [
     "genres",
     "series_title",
     "series_position",
+    "source",
     "is_sample",
 ]
 
@@ -107,15 +110,21 @@ def _files_named(root: Path, fragment: str, suffix: str = ".csv") -> list[Path]:
 
 
 def reconstruct_books(
-    root: Path, *, show_default: bool = False, show_samples: bool = False
+    root: Path,
+    *,
+    show_default: bool = False,
+    show_samples: bool = False,
+    source: str = "kindle",
 ) -> list[Book]:
     """Return deduplicated, intrinsic book metadata found under *root*.
 
-    Samples are omitted unless ``show_samples`` is true. Kindle-supplied
-    dictionaries and user guides are omitted unless ``show_default`` is true.
-    Activity fields (reading dates, progress, sessions, annotations, and account
-    state) are deliberately not copied into the result.
+    ``source`` selects Kindle content, print books, or ``all``. Samples are omitted
+    unless ``show_samples`` is true. Kindle-supplied dictionaries and user guides
+    are omitted unless ``show_default`` is true. Activity fields (reading dates,
+    progress, sessions, annotations, and account state) are deliberately not copied.
     """
+    if source not in {"kindle", "print", "all"}:
+        raise ValueError(f"invalid source: {source}")
     root = root.expanduser()
     if not root.is_dir():
         raise ExportError(f"not a directory: {root}")
@@ -150,6 +159,7 @@ def reconstruct_books(
             raise ExportError(f"cannot read {path}: {exc}") from exc
         book = get(resource.get("ASIN"))
         if book:
+            book.source = "kindle"
             book.set_title(resource.get("Product Name"), 30)
             origins = {
                 clean(right.get("origin", {}).get("originType")).casefold()
@@ -176,8 +186,14 @@ def reconstruct_books(
             continue
         if clean(row.get("Ownership Type")).casefold() not in owner_types:
             continue
-        book = get(row.get("ASIN"))
+        asin = clean(row.get("ASIN"))
+        existing = books.get(asin)
+        book = get(asin)
         if book:
+            # ULI includes physical Amazon purchases. Kindle ownership evidence
+            # takes precedence; an item found only in ULI is a print book.
+            if existing is None:
+                book.source = "print"
             book.set_title(row.get("Product Name"), 50)
             if clean(row.get("Ownership Type")).casefold() == "sample owner":
                 book.is_sample = True
@@ -201,6 +217,7 @@ def reconstruct_books(
                 continue
             book = get(row.get(id_column))
             if book:
+                book.source = "kindle"
                 book.set_title(row.get(title_column), rank)
 
     # Reading Insights contains a title alongside its identifier. We retain only
@@ -213,6 +230,7 @@ def reconstruct_books(
         if clean(row.get("product_name")):
             book = get(row.get("ASIN"), row.get("personal_document_id"))
             if book:
+                book.source = "kindle"
                 book.set_title(row.get("product_name"), 40)
     for row in _csv_rows(completed_paths):
         encoded = clean(row.get("asin_date_and_content_type"))
@@ -220,6 +238,7 @@ def reconstruct_books(
         if clean(row.get("product_name")):
             book = get(asin, row.get("personal_document_id"))
             if book:
+                book.source = "kindle"
                 book.set_title(row.get("product_name"), 40)
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
@@ -229,6 +248,7 @@ def reconstruct_books(
     for row in _csv_rows(document_paths):
         book = get(document_id=row.get("DocumentId"))
         if book:
+            book.source = "kindle"
             book.set_title(row.get("Title"), 50)
 
     # The Saga table provides explicit item-to-series metadata.
@@ -244,6 +264,7 @@ def reconstruct_books(
             continue
         book = get(item_asin)
         if book:
+            book.source = "kindle"
             book.set_title(row.get("item-product-name"), 45)
             book.set_series(row.get("series-product-name"), row.get("item-position-in-series"), 50)
 
@@ -268,4 +289,6 @@ def reconstruct_books(
         result = (book for book in result if not book.is_default_content)
     if not show_samples:
         result = (book for book in result if not book.is_sample)
+    if source != "all":
+        result = (book for book in result if book.source == source)
     return sorted(result, key=lambda book: (book.title.casefold(), book.key))

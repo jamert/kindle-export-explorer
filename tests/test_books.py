@@ -138,6 +138,45 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert "\ttrue\n" in shown_result.output
 
 
+def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    (ownership / "Digital.Content.Ownership.1.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "1234567890",
+                    "Product Name": "Numeric Kindle Book",
+                    "resourceType": "KindleEBook",
+                },
+                "rights": [{"origin": {"originType": "Purchase"}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_csv(
+        tmp_path,
+        "uli/CustomerRelationshipIndex.1.csv",
+        ["ASIN", "Product Name", "Resource Type", "Ownership Type"],
+        [
+            ["1234567890", "Numeric Kindle Book", "ITEM", "Item Owner"],
+            ["B0PRINT123", "Everything Fat Loss", "ITEM", "Item Owner"],
+        ],
+    )
+
+    kindle = reconstruct_books(tmp_path)
+    printed = reconstruct_books(tmp_path, source="print")
+    all_books = reconstruct_books(tmp_path, source="all")
+    assert [(book.asin, book.source) for book in kindle] == [("1234567890", "kindle")]
+    assert [(book.asin, book.source) for book in printed] == [("B0PRINT123", "print")]
+    assert len(all_books) == 2
+
+    result = CliRunner().invoke(main, ["--source", "print", str(tmp_path)])
+    assert result.exit_code == 0
+    assert "Everything Fat Loss" in result.output
+    assert "Numeric Kindle Book" not in result.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,
@@ -158,6 +197,7 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
         "genres",
         "series_title",
         "series_position",
+        "source",
         "is_sample",
     ]
     assert rows[1][:3] == ["", "DOC1", "My Document"]

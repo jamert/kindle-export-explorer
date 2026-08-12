@@ -18,17 +18,30 @@ from .books import ExportError, HEADERS, reconstruct_books
     help="Include Kindle-supplied dictionaries and user guides.",
 )
 @click.option("--show-samples", is_flag=True, help="Include book samples.")
+@click.option(
+    "--source",
+    type=click.Choice(["kindle", "print", "all"], case_sensitive=False),
+    default="kindle",
+    show_default=True,
+    help="Select books by source.",
+)
 @click.argument(
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
 )
-def main(export_directory: Path, show_default: bool, show_samples: bool) -> None:
+def main(
+    export_directory: Path,
+    show_default: bool,
+    show_samples: bool,
+    source: str,
+) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
         books = reconstruct_books(
             export_directory,
             show_default=show_default,
             show_samples=show_samples,
+            source=source,
         )
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc

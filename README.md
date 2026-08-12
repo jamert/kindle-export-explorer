@@ -11,13 +11,26 @@ activity are not emitted.
 uv run kindle-books /path/to/Kindle > books.tsv
 ```
 
-Book samples, Kindle-supplied dictionaries, and Kindle user guides are excluded by
-default. Include either group with `--show-samples` or `--show-default`:
+Only Kindle books are emitted by default. The Unified Library Index also contains
+print purchases; select them with `--source print`, or select both sources with
+`--source all`:
+
+```console
+uv run kindle-books --source print /path/to/Kindle > print-books.tsv
+uv run kindle-books --source all /path/to/Kindle > kindle-and-print-books.tsv
+```
+
+Source detection uses Kindle ownership records rather than the shape of the ASIN, so
+print books with a `B`-prefixed ASIN are still classified as print. The TSV includes a
+`source` column containing `kindle` or `print`.
+
+Book samples, Kindle-supplied dictionaries, and Kindle user guides are also excluded
+by default. Include either group with `--show-samples` or `--show-default`:
 
 ```console
 uv run kindle-books --show-samples /path/to/Kindle > books-with-samples.tsv
 uv run kindle-books --show-default /path/to/Kindle > books-with-defaults.tsv
-uv run kindle-books --show-samples --show-default /path/to/Kindle > all-books.tsv
+uv run kindle-books --source all --show-samples --show-default /path/to/Kindle > all-books.tsv
 ```
 
 The TSV includes an `is_sample` column. Purchased books are retained even when their
