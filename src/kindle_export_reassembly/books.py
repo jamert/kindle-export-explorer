@@ -11,6 +11,21 @@ from typing import Iterable, Iterator
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
 _DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}
+# These source fields are represented by authoritative canonical output columns.
+_CANONICAL_RAW_FIELDS = {
+    "asin",
+    "author name",
+    "documentid",
+    "genre",
+    "item-asin",
+    "item-position-in-series",
+    "item-product-name",
+    "position in collection",
+    "product name",
+    "series title",
+    "series-product-name",
+    "title",
+}
 
 
 class ExportError(ValueError):
@@ -44,6 +59,7 @@ class Book:
     source: str = "kindle"
     is_sample: bool = False
     is_default_content: bool = field(default=False, repr=False)
+    raw_fields: dict[str, set[str]] = field(default_factory=dict, repr=False)
     _title_rank: int = field(default=-1, repr=False)
     _series_rank: int = field(default=-1, repr=False)
 
@@ -64,8 +80,26 @@ class Book:
             self.series_position = clean(position)
             self._series_rank = rank
 
-    def as_row(self) -> list[str]:
-        return [
+    def add_raw(
+        self,
+        namespace: str,
+        values: dict[str, object],
+        fields: Iterable[str] | None = None,
+    ) -> None:
+        """Retain non-empty source values, preserving conflicting/repeated values."""
+        names = fields if fields is not None else values.keys()
+        for name in names:
+            # Canonical columns use an explicit source-precedence policy. Do not
+            # duplicate those values in raw output. Saga's series-ASIN is retained
+            # because it identifies a different entity.
+            if name.casefold() in _CANONICAL_RAW_FIELDS:
+                continue
+            value = clean(values.get(name))
+            if value:
+                self.raw_fields.setdefault(f"raw.{namespace}.{name}", set()).add(value)
+
+    def as_row(self, raw_headers: Iterable[str] = ()) -> list[str]:
+        row = [
             self.asin,
             self.document_id,
             self.title,
@@ -76,6 +110,11 @@ class Book:
             self.source,
             "true" if self.is_sample else "false",
         ]
+        row.extend(
+            "; ".join(sorted(self.raw_fields.get(header, ()), key=str.casefold))
+            for header in raw_headers
+        )
+        return row
 
 
 HEADERS = [
@@ -89,6 +128,11 @@ HEADERS = [
     "source",
     "is_sample",
 ]
+
+
+def raw_headers(books: Iterable[Book]) -> list[str]:
+    """Return the sorted union of raw fields present on the selected books."""
+    return sorted({name for book in books for name in book.raw_fields}, key=str.casefold)
 
 
 def _csv_rows(paths: Iterable[Path]) -> Iterator[dict[str, str]]:
@@ -161,6 +205,14 @@ def reconstruct_books(
         if book:
             book.source = "kindle"
             book.set_title(resource.get("Product Name"), 30)
+            book.add_raw("ownership.resource", resource)
+            for right in data.get("rights", []):
+                if not isinstance(right, dict):
+                    continue
+                book.add_raw("ownership.right", right, ("rightType",))
+                origin = right.get("origin", {})
+                if isinstance(origin, dict):
+                    book.add_raw("ownership.origin", origin)
             origins = {
                 clean(right.get("origin", {}).get("originType")).casefold()
                 for right in data.get("rights", [])
@@ -194,52 +246,41 @@ def reconstruct_books(
             # takes precedence; an item found only in ULI is a print book.
             if existing is None:
                 book.source = "print"
+            book.add_raw(
+                "library.relationship",
+                row,
+                (
+                    "Product Name",
+                    "ASIN",
+                    "Resource Type",
+                    "Our Price",
+                    "Sortable Title",
+                    "Sortable Author Name",
+                    "Series Author",
+                    "Series Title",
+                    "Relation Type",
+                    "Position In Collection",
+                    "Marketplace",
+                ),
+            )
             book.set_title(row.get("Product Name"), 50)
             if clean(row.get("Ownership Type")).casefold() == "sample owner":
                 book.is_sample = True
             book.set_series(row.get("Series Title"), row.get("Position In Collection"), 10)
 
-    # Product-bearing export tables recover titles whose current library right
-    # is absent. Their behavioral fields are intentionally ignored.
-    title_sources = [
-        ("whispersync.csv", "ASIN", "Product Name", 20),
-        ("ContentUpdates", "ASIN", "Product Name", 25),
-        ("ManualContentUpdates", "ASIN", "Product Name", 25),
-        ("AnnotationUpdates", "ASIN", "Product Name", 25),
-        ("BookRelation.csv", "ASIN", "Product Name", 35),
-    ]
-    for fragment, id_column, title_column, rank in title_sources:
-        paths = _files_named(root, fragment)
-        if paths:
-            recognized = True
-        for row in _csv_rows(paths):
-            if not clean(row.get(title_column)):
-                continue
-            book = get(row.get(id_column))
-            if book:
-                book.source = "kindle"
-                book.set_title(row.get(title_column), rank)
-
-    # Reading Insights contains a title alongside its identifier. We retain only
-    # those two book attributes, never completion/session information.
-    insight_paths = _files_named(root, "reading-insights-sessions_with_adjustments")
-    completed_paths = _files_named(root, "UserUniqueTitlesCompleted")
-    if insight_paths or completed_paths:
+    # BookRelation contains intrinsic item-to-series catalog relations. Its
+    # acquisition timestamp is deliberately ignored.
+    book_relation_paths = _files_named(root, "BookRelation.csv")
+    if book_relation_paths:
         recognized = True
-    for row in _csv_rows(insight_paths):
-        if clean(row.get("product_name")):
-            book = get(row.get("ASIN"), row.get("personal_document_id"))
-            if book:
-                book.source = "kindle"
-                book.set_title(row.get("product_name"), 40)
-    for row in _csv_rows(completed_paths):
-        encoded = clean(row.get("asin_date_and_content_type"))
-        asin = encoded.split("_", 1)[0] if encoded else ""
-        if clean(row.get("product_name")):
-            book = get(asin, row.get("personal_document_id"))
-            if book:
-                book.source = "kindle"
-                book.set_title(row.get("product_name"), 40)
+    for row in _csv_rows(book_relation_paths):
+        if not clean(row.get("Product Name")):
+            continue
+        book = get(row.get("ASIN"))
+        if book:
+            book.source = "kindle"
+            book.add_raw("book_relation", row, ("ASIN", "Product Name"))
+            book.set_title(row.get("Product Name"), 35)
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
     document_paths = _files_named(root, "DocumentMetadata")
@@ -249,6 +290,11 @@ def reconstruct_books(
         book = get(document_id=row.get("DocumentId"))
         if book:
             book.source = "kindle"
+            book.add_raw(
+                "personal_document",
+                row,
+                tuple(name for name in row if name not in {"HasBeenDeleted", "EntryCreationDate"}),
+            )
             book.set_title(row.get("Title"), 50)
 
     # The Saga table provides explicit item-to-series metadata.
@@ -265,6 +311,18 @@ def reconstruct_books(
         book = get(item_asin)
         if book:
             book.source = "kindle"
+            book.add_raw(
+                "series",
+                row,
+                (
+                    "record-type",
+                    "series-ASIN",
+                    "series-product-name",
+                    "item-ASIN",
+                    "item-product-name",
+                    "item-position-in-series",
+                ),
+            )
             book.set_title(row.get("item-product-name"), 45)
             book.set_series(row.get("series-product-name"), row.get("item-position-in-series"), 50)
 
@@ -275,11 +333,36 @@ def reconstruct_books(
         author = clean(row.get("Author Name"))
         if book and author:
             book.authors.add(author)
+            book.add_raw("author", row)
+    for row in _csv_rows(_files_named(root, "CustomerAuthorIdRelationship")):
+        book = books.get(clean(row.get("ASIN")))
+        if book:
+            book.add_raw("author_id", row)
     for row in _csv_rows(_files_named(root, "CustomerGenres")):
         book = books.get(clean(row.get("ASIN")))
         genre = clean(row.get("Genre"))
         if book and genre:
             book.genres.add(genre)
+            book.add_raw("genre", row)
+    for row in _csv_rows(_files_named(root, "CustomerRelationshipTypes")):
+        book = books.get(clean(row.get("ASIN")))
+        if book and clean(row.get("Ownership Type")).casefold() in owner_types:
+            book.add_raw("library.relationship_type", row)
+    book_tag_groups = {"author", "catalog", "genre", "media-concept-node"}
+    for row in _csv_rows(_files_named(root, "CustomerTags")):
+        book = books.get(clean(row.get("ASIN")))
+        if book and clean(row.get("Tag Source Group")).casefold() in book_tag_groups:
+            book.add_raw(
+                "library.tag",
+                row,
+                (
+                    "Tag Name",
+                    "Tag Scope",
+                    "Tag Source Group",
+                    "Tag Source Subgroup",
+                    "Image URL",
+                ),
+            )
 
     if not recognized:
         raise ExportError(f"no recognized Kindle export files found in {root}")

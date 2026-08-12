@@ -37,11 +37,31 @@ The TSV includes an `is_sample` column. Purchased books are retained even when t
 titles contain words such as “dictionary” or “manual”; default-content filtering uses
 Amazon's ownership origin metadata rather than title matching.
 
+Use `--raw` to append every connected book/source field available for the selected
+books:
+
+```console
+uv run kindle-books --raw /path/to/Kindle > books-raw.tsv
+uv run kindle-books --raw --source all --show-samples --show-default /path/to/Kindle > everything-raw.tsv
+```
+
+Raw columns are namespaced by dataset (for example,
+`raw.ownership.resource.resourceType` and `raw.library.relationship.Our Price`). When
+several source records provide different values, the values are joined with `; `.
+Source copies of canonical fields (identifiers, titles, authors, genres, and series
+metadata) are omitted; `series-ASIN` remains because it identifies the series rather
+than the book. See the ER diagram for canonical field precedence. Reading,
+annotation, synchronization, content-update, timestamp, and device activity
+tables are not used.
+
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.
 
 Use `uv run kindle-books --help` for CLI help.
+
+See [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for the entity–relationship diagram,
+join keys, provenance rules, and currently unconnected entities.
 
 ## Develop
 

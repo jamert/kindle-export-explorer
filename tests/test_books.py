@@ -132,10 +132,22 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     runner = CliRunner()
     default_result = runner.invoke(main, [str(tmp_path)])
     shown_result = runner.invoke(main, ["--show-samples", str(tmp_path)])
+    raw_result = runner.invoke(main, ["--show-samples", "--raw", str(tmp_path)])
     assert default_result.exit_code == 0
     assert "SAMPLE" not in default_result.output
     assert "SAMPLE" in shown_result.output
     assert "\ttrue\n" in shown_result.output
+    assert raw_result.exit_code == 0
+    raw_rows = list(csv.DictReader(raw_result.output.splitlines(), dialect="excel-tab"))
+    assert "raw.ownership.resource.resourceType" in raw_rows[0]
+    assert "raw.ownership.origin.originType" in raw_rows[0]
+    assert not any(
+        name.casefold().endswith((".asin", ".item-asin")) for name in raw_rows[0]
+    )
+    assert not any(name.endswith(".Product Name") for name in raw_rows[0])
+    sample = next(row for row in raw_rows if row["asin"] == "SAMPLE")
+    assert sample["raw.ownership.resource.resourceType"] == "KindleEBookSample"
+    assert sample["raw.ownership.origin.originType"] == "Sample"
 
 
 def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path) -> None:
@@ -175,6 +187,51 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path
     assert result.exit_code == 0
     assert "Everything Fat Loss" in result.output
     assert "Numeric Kindle Book" not in result.output
+
+
+def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    (ownership / "Digital.Content.Ownership.1.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "BOOK",
+                    "Product Name": "Real Book",
+                    "resourceType": "KindleEBook",
+                },
+                "rights": [{"origin": {"originType": "Purchase"}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_csv(
+        tmp_path,
+        "Digital.Content.Whispersync/whispersync.csv",
+        ["ASIN", "Product Name", "ContentType", "Format"],
+        [["ACTIVITY", "Activity Book", "EBOK", "Mobi8"]],
+    )
+    write_csv(
+        tmp_path,
+        "Kindle.KindleContentUpdate/Kindle.KindleContentUpdate.ContentUpdates.csv",
+        ["ASIN", "Product Name", "Current Book Format", "New Book Format"],
+        [["UPDATE", "Updated Book", "Mobi", "Enhanced TypeSetting"]],
+    )
+    write_csv(
+        tmp_path,
+        "Kindle.ReadingInsights/Kindle.UserUniqueTitlesCompleted.csv",
+        ["asin_date_and_content_type", "personal_document_id", "product_name"],
+        [["COMPLETED_2025-01-01_AUTOMATIC", "", "Completed Book"]],
+    )
+
+    result = CliRunner().invoke(main, ["--raw", str(tmp_path)])
+    assert result.exit_code == 0
+    rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
+    assert [row["asin"] for row in rows] == ["BOOK"]
+    assert not any(
+        name.startswith(("raw.whispersync.", "raw.content_update.", "raw.completed_title."))
+        for name in rows[0]
+    )
 
 
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:

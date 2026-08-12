@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from .books import ExportError, HEADERS, reconstruct_books
+from .books import ExportError, HEADERS, raw_headers, reconstruct_books
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
@@ -25,6 +25,11 @@ from .books import ExportError, HEADERS, reconstruct_books
     show_default=True,
     help="Select books by source.",
 )
+@click.option(
+    "--raw",
+    is_flag=True,
+    help="Append all connected source fields available for the selected books.",
+)
 @click.argument(
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
@@ -34,6 +39,7 @@ def main(
     show_default: bool,
     show_samples: bool,
     source: str,
+    raw: bool,
 ) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
@@ -47,8 +53,9 @@ def main(
         raise click.ClickException(str(exc)) from exc
 
     writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
-    writer.writerow(HEADERS)
-    writer.writerows(book.as_row() for book in books)
+    extra_headers = raw_headers(books) if raw else []
+    writer.writerow([*HEADERS, *extra_headers])
+    writer.writerows(book.as_row(extra_headers) for book in books)
 
 
 __all__ = ["main", "reconstruct_books"]
