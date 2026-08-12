@@ -12,14 +12,19 @@ from .books import ExportError, HEADERS, reconstruct_books
 
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
+@click.option(
+    "--show-default",
+    is_flag=True,
+    help="Include Kindle-supplied dictionaries and user guides.",
+)
 @click.argument(
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
 )
-def main(export_directory: Path) -> None:
+def main(export_directory: Path, show_default: bool) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
-        books = reconstruct_books(export_directory)
+        books = reconstruct_books(export_directory, show_default=show_default)
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 

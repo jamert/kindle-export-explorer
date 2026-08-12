@@ -11,6 +11,17 @@ activity are not emitted.
 uv run kindle-books /path/to/Kindle > books.tsv
 ```
 
+Kindle-supplied dictionaries and Kindle user guides are excluded by default. Include
+them with:
+
+```console
+uv run kindle-books --show-default /path/to/Kindle > books-with-defaults.tsv
+```
+
+Purchased or sampled books are retained even when their titles contain words such as
+“dictionary” or “manual”; filtering uses Amazon's ownership origin metadata rather
+than title matching.
+
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.

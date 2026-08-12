@@ -63,6 +63,43 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
     assert books[0].series_position == "2"
 
 
+def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    records = [
+        ("DEFAULT-DICT", "Kindle Dictionary", "KindleDictionary"),
+        ("DEFAULT-GUIDE", "Kindle User Guide", "KindleUserGuide"),
+        ("BALLET", "Technical Manual and Dictionary of Classical Ballet", "Purchase"),
+    ]
+    for number, (asin, title, origin) in enumerate(records):
+        (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
+            json.dumps(
+                {
+                    "resource": {"ASIN": asin, "Product Name": title},
+                    "rights": [{"origin": {"originType": origin}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    assert [book.asin for book in reconstruct_books(tmp_path)] == ["BALLET"]
+    assert {book.asin for book in reconstruct_books(tmp_path, show_default=True)} == {
+        "BALLET",
+        "DEFAULT-DICT",
+        "DEFAULT-GUIDE",
+    }
+
+    runner = CliRunner()
+    default_result = runner.invoke(main, [str(tmp_path)])
+    shown_result = runner.invoke(main, ["--show-default", str(tmp_path)])
+    assert default_result.exit_code == 0
+    assert "DEFAULT-DICT" not in default_result.output
+    assert "DEFAULT-GUIDE" not in default_result.output
+    assert "BALLET" in default_result.output
+    assert "DEFAULT-DICT" in shown_result.output
+    assert "DEFAULT-GUIDE" in shown_result.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,

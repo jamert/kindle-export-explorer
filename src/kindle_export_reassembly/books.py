@@ -10,6 +10,7 @@ from typing import Iterable, Iterator
 
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
+_DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}
 
 
 class ExportError(ValueError):
@@ -40,6 +41,7 @@ class Book:
     genres: set[str] = field(default_factory=set)
     series_title: str = ""
     series_position: str = ""
+    is_default_content: bool = field(default=False, repr=False)
     _title_rank: int = field(default=-1, repr=False)
     _series_rank: int = field(default=-1, repr=False)
 
@@ -101,11 +103,12 @@ def _files_named(root: Path, fragment: str, suffix: str = ".csv") -> list[Path]:
     )
 
 
-def reconstruct_books(root: Path) -> list[Book]:
+def reconstruct_books(root: Path, *, show_default: bool = False) -> list[Book]:
     """Return deduplicated, intrinsic book metadata found under *root*.
 
-    Activity fields (reading dates, progress, sessions, annotations, and account
-    state) are deliberately not copied into the result.
+    Kindle-supplied dictionaries and user guides are omitted unless
+    ``show_default`` is true. Activity fields (reading dates, progress, sessions,
+    annotations, and account state) are deliberately not copied into the result.
     """
     root = root.expanduser()
     if not root.is_dir():
@@ -142,6 +145,12 @@ def reconstruct_books(root: Path) -> list[Book]:
         book = get(resource.get("ASIN"))
         if book:
             book.set_title(resource.get("Product Name"), 30)
+            origins = {
+                clean(right.get("origin", {}).get("originType")).casefold()
+                for right in data.get("rights", [])
+                if isinstance(right, dict) and isinstance(right.get("origin"), dict)
+            }
+            book.is_default_content = bool(origins & _DEFAULT_ORIGIN_TYPES)
 
     # Unified Library Index identifies actual library items. Exclude rows which
     # only describe wish-list/not-interested/customer-metadata activity.
@@ -240,4 +249,7 @@ def reconstruct_books(root: Path) -> list[Book]:
     if not recognized:
         raise ExportError(f"no recognized Kindle export files found in {root}")
 
-    return sorted(books.values(), key=lambda book: (book.title.casefold(), book.key))
+    result = books.values()
+    if not show_default:
+        result = (book for book in result if not book.is_default_content)
+    return sorted(result, key=lambda book: (book.title.casefold(), book.key))
