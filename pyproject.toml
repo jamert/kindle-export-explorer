@@ -1,0 +1,22 @@
+[project]
+name = "kindle-export-reassembly"
+version = "0.1.0"
+description = "Reconstruct a TSV book list from an Amazon Kindle data export"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "click>=8.4.2",
+]
+
+[project.scripts]
+kindle-books = "kindle_export_reassembly:main"
+kindle-export-reassembly = "kindle_export_reassembly:main"
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
