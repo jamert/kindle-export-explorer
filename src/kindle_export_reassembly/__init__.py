@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import sys
 from pathlib import Path
 
@@ -30,6 +31,13 @@ from .books import ExportError, HEADERS, raw_headers, reconstruct_books
     is_flag=True,
     help="Append all connected source fields available for the selected books.",
 )
+@click.option(
+    "--jsonl",
+    "--json",
+    "json_lines",
+    is_flag=True,
+    help="Write one JSON object per line instead of TSV.",
+)
 @click.argument(
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
@@ -40,6 +48,7 @@ def main(
     show_samples: bool,
     source: str,
     raw: bool,
+    json_lines: bool,
 ) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
@@ -52,8 +61,13 @@ def main(
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
     extra_headers = raw_headers(books) if raw else []
+    if json_lines:
+        for book in books:
+            click.echo(json.dumps(book.as_dict(extra_headers), ensure_ascii=False))
+        return
+
+    writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
     writer.writerow([*HEADERS, *extra_headers])
     writer.writerows(book.as_row(extra_headers) for book in books)
 

@@ -234,6 +234,37 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
     )
 
 
+def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    (ownership / "Digital.Content.Ownership.1.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "SAMPLE",
+                    "Product Name": "Échantillon",
+                    "resourceType": "KindleEBookSample",
+                },
+                "rights": [{"origin": {"originType": "Sample"}}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    runner = CliRunner()
+    for option in ("--json", "--jsonl"):
+        result = runner.invoke(main, [option, "--show-samples", "--raw", str(tmp_path)])
+        assert result.exit_code == 0
+        lines = result.output.splitlines()
+        assert len(lines) == 1
+        record = json.loads(lines[0])
+        assert record["title"] == "Échantillon"
+        assert record["authors"] == []
+        assert record["genres"] == []
+        assert record["is_sample"] is True
+        assert record["raw.ownership.resource.resourceType"] == "KindleEBookSample"
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,

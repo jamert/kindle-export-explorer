@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterable, Iterator
+from typing import Iterator
 
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
@@ -83,7 +84,7 @@ class Book:
     def add_raw(
         self,
         namespace: str,
-        values: dict[str, object],
+        values: Mapping[str, object],
         fields: Iterable[str] | None = None,
     ) -> None:
         """Retain non-empty source values, preserving conflicting/repeated values."""
@@ -97,6 +98,28 @@ class Book:
             value = clean(values.get(name))
             if value:
                 self.raw_fields.setdefault(f"raw.{namespace}.{name}", set()).add(value)
+
+    def as_dict(self, raw_headers: Iterable[str] = ()) -> dict[str, object]:
+        result: dict[str, object] = {
+            "asin": self.asin,
+            "document_id": self.document_id,
+            "title": self.title,
+            "authors": sorted(self.authors, key=str.casefold),
+            "genres": sorted(self.genres, key=str.casefold),
+            "series_title": self.series_title,
+            "series_position": self.series_position,
+            "source": self.source,
+            "is_sample": self.is_sample,
+        }
+        result.update(
+            {
+                header: "; ".join(
+                    sorted(self.raw_fields.get(header, ()), key=str.casefold)
+                )
+                for header in raw_headers
+            }
+        )
+        return result
 
     def as_row(self, raw_headers: Iterable[str] = ()) -> list[str]:
         row = [

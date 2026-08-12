@@ -45,6 +45,14 @@ uv run kindle-books --raw /path/to/Kindle > books-raw.tsv
 uv run kindle-books --raw --source all --show-samples --show-default /path/to/Kindle > everything-raw.tsv
 ```
 
+Use `--jsonl` (or its `--json` alias) to write one JSON object per line instead of
+TSV. JSON output uses arrays for authors and genres and a boolean for `is_sample`:
+
+```console
+uv run kindle-books --jsonl /path/to/Kindle > books.jsonl
+uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
+```
+
 Raw columns are namespaced by dataset (for example,
 `raw.ownership.resource.resourceType` and `raw.library.relationship.Our Price`). When
 several source records provide different values, the values are joined with `; `.
@@ -67,4 +75,5 @@ join keys, provenance rules, and currently unconnected entities.
 
 ```console
 uv run pytest
+uv run pyright
 ```
