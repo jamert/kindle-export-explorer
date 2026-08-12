@@ -41,6 +41,7 @@ class Book:
     genres: set[str] = field(default_factory=set)
     series_title: str = ""
     series_position: str = ""
+    is_sample: bool = False
     is_default_content: bool = field(default=False, repr=False)
     _title_rank: int = field(default=-1, repr=False)
     _series_rank: int = field(default=-1, repr=False)
@@ -71,6 +72,7 @@ class Book:
             "; ".join(sorted(self.genres, key=str.casefold)),
             self.series_title,
             self.series_position,
+            "true" if self.is_sample else "false",
         ]
 
 
@@ -82,6 +84,7 @@ HEADERS = [
     "genres",
     "series_title",
     "series_position",
+    "is_sample",
 ]
 
 
@@ -103,12 +106,15 @@ def _files_named(root: Path, fragment: str, suffix: str = ".csv") -> list[Path]:
     )
 
 
-def reconstruct_books(root: Path, *, show_default: bool = False) -> list[Book]:
+def reconstruct_books(
+    root: Path, *, show_default: bool = False, show_samples: bool = False
+) -> list[Book]:
     """Return deduplicated, intrinsic book metadata found under *root*.
 
-    Kindle-supplied dictionaries and user guides are omitted unless
-    ``show_default`` is true. Activity fields (reading dates, progress, sessions,
-    annotations, and account state) are deliberately not copied into the result.
+    Samples are omitted unless ``show_samples`` is true. Kindle-supplied
+    dictionaries and user guides are omitted unless ``show_default`` is true.
+    Activity fields (reading dates, progress, sessions, annotations, and account
+    state) are deliberately not copied into the result.
     """
     root = root.expanduser()
     if not root.is_dir():
@@ -150,7 +156,13 @@ def reconstruct_books(root: Path, *, show_default: bool = False) -> list[Book]:
                 for right in data.get("rights", [])
                 if isinstance(right, dict) and isinstance(right.get("origin"), dict)
             }
-            book.is_default_content = bool(origins & _DEFAULT_ORIGIN_TYPES)
+            book.is_sample = book.is_sample or (
+                clean(resource.get("resourceType")).casefold() == "kindleebooksample"
+                or "sample" in origins
+            )
+            book.is_default_content = book.is_default_content or bool(
+                origins & _DEFAULT_ORIGIN_TYPES
+            )
 
     # Unified Library Index identifies actual library items. Exclude rows which
     # only describe wish-list/not-interested/customer-metadata activity.
@@ -167,6 +179,8 @@ def reconstruct_books(root: Path, *, show_default: bool = False) -> list[Book]:
         book = get(row.get("ASIN"))
         if book:
             book.set_title(row.get("Product Name"), 50)
+            if clean(row.get("Ownership Type")).casefold() == "sample owner":
+                book.is_sample = True
             book.set_series(row.get("Series Title"), row.get("Position In Collection"), 10)
 
     # Product-bearing export tables recover titles whose current library right
@@ -252,4 +266,6 @@ def reconstruct_books(root: Path, *, show_default: bool = False) -> list[Book]:
     result = books.values()
     if not show_default:
         result = (book for book in result if not book.is_default_content)
+    if not show_samples:
+        result = (book for book in result if not book.is_sample)
     return sorted(result, key=lambda book: (book.title.casefold(), book.key))

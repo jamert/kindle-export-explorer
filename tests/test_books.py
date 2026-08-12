@@ -100,6 +100,44 @@ def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> No
     assert "DEFAULT-GUIDE" in shown_result.output
 
 
+def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    records = [
+        ("FULL", "A Full Book", "KindleEBook", "Purchase"),
+        ("SAMPLE", "A Book Sample", "KindleEBookSample", "Sample"),
+    ]
+    for number, (asin, title, resource_type, origin) in enumerate(records):
+        (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
+            json.dumps(
+                {
+                    "resource": {
+                        "ASIN": asin,
+                        "Product Name": title,
+                        "resourceType": resource_type,
+                    },
+                    "rights": [{"origin": {"originType": origin}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    assert [book.asin for book in reconstruct_books(tmp_path)] == ["FULL"]
+    books = reconstruct_books(tmp_path, show_samples=True)
+    assert {book.asin: book.is_sample for book in books} == {
+        "FULL": False,
+        "SAMPLE": True,
+    }
+
+    runner = CliRunner()
+    default_result = runner.invoke(main, [str(tmp_path)])
+    shown_result = runner.invoke(main, ["--show-samples", str(tmp_path)])
+    assert default_result.exit_code == 0
+    assert "SAMPLE" not in default_result.output
+    assert "SAMPLE" in shown_result.output
+    assert "\ttrue\n" in shown_result.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,
@@ -120,6 +158,7 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
         "genres",
         "series_title",
         "series_position",
+        "is_sample",
     ]
     assert rows[1][:3] == ["", "DOC1", "My Document"]
     assert "EntryCreationDate" not in rows[0]
