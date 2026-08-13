@@ -13,23 +13,6 @@ from typing import Iterator
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
 _DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}
-# These source fields are represented by authoritative canonical output columns.
-_CANONICAL_RAW_FIELDS = {
-    "asin",
-    "author name",
-    "documentid",
-    "genre",
-    "item-asin",
-    "item-position-in-series",
-    "item-product-name",
-    "position in collection",
-    "product name",
-    "series title",
-    "series-product-name",
-    "title",
-}
-
-
 class ExportError(ValueError):
     """Raised when a directory is not a recognizable Kindle export."""
 
@@ -91,29 +74,27 @@ class Book:
         """Retain non-empty source values with their exact file provenance."""
         names = fields if fields is not None else values.keys()
         for name in names:
-            # Canonical columns use an explicit source-precedence policy. Do not
-            # duplicate those values in raw output. Saga's series-ASIN is retained
-            # because it identifies a different entity.
-            if name.rsplit(".", 1)[-1].casefold() in _CANONICAL_RAW_FIELDS:
-                continue
             value = clean(values.get(name))
             if value:
                 self.raw_fields.setdefault(f"{source_path}->{name}", set()).add(value)
 
-    def as_dict(
-        self, raw_headers: Iterable[str] = (), *, synthetic_prefix: bool = False
-    ) -> dict[str, object]:
-        prefix = "synthetic->" if synthetic_prefix else ""
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "asin": self.asin,
+            "document_id": self.document_id,
+            "title": self.title,
+            "authors": sorted(self.authors, key=str.casefold),
+            "genres": sorted(self.genres, key=str.casefold),
+            "series_title": self.series_title,
+            "series_position": self.series_position,
+            "source": self.source,
+            "is_sample": self.is_sample,
+        }
+
+    def as_raw_dict(self, raw_headers: Iterable[str]) -> dict[str, object]:
         result: dict[str, object] = {
-            f"{prefix}asin": self.asin,
-            f"{prefix}document_id": self.document_id,
-            f"{prefix}title": self.title,
-            f"{prefix}authors": sorted(self.authors, key=str.casefold),
-            f"{prefix}genres": sorted(self.genres, key=str.casefold),
-            f"{prefix}series_title": self.series_title,
-            f"{prefix}series_position": self.series_position,
-            f"{prefix}source": self.source,
-            f"{prefix}is_sample": self.is_sample,
+            "synthetic->source": self.source,
+            "synthetic->is_sample": self.is_sample,
         }
         result.update(
             {
@@ -125,8 +106,8 @@ class Book:
         )
         return result
 
-    def as_row(self, raw_headers: Iterable[str] = ()) -> list[str]:
-        row = [
+    def as_row(self) -> list[str]:
+        return [
             self.asin,
             self.document_id,
             self.title,
@@ -137,11 +118,18 @@ class Book:
             self.source,
             "true" if self.is_sample else "false",
         ]
-        row.extend(
-            "; ".join(sorted(self.raw_fields.get(header, ()), key=str.casefold))
-            for header in raw_headers
-        )
-        return row
+
+    def as_raw_row(self, raw_headers: Iterable[str]) -> list[str]:
+        return [
+            self.source,
+            "true" if self.is_sample else "false",
+            *(
+                "; ".join(
+                    sorted(self.raw_fields.get(header, ()), key=str.casefold)
+                )
+                for header in raw_headers
+            ),
+        ]
 
 
 HEADERS = [

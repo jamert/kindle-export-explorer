@@ -134,7 +134,7 @@ No joins use title, author name, author ID, order ID, or filename.
 ## Canonical field authority
 
 When several datasets repeat a field, the normal columns use these authoritative
-sources and `--raw` does not repeat the source copies:
+sources. Raw mode instead exposes the original values under their source paths:
 
 | Canonical field | Authority / precedence |
 |---|---|
@@ -158,8 +158,10 @@ example, ULI `Resource Type` (`ITEM`) and Digital Ownership `resourceType`
 (`KindleEBook`, `KindleEBookSample`, etc.) describe different layers and both remain.
 Likewise, `series-ASIN` identifies the series, not the book.
 
-In `--raw` mode, every field carries explicit provenance. Synthesized columns are
-named `synthetic->{field_name}`. Source columns are named
+In `--raw` mode, every field carries explicit provenance. Only the computed `source`
+and `is_sample` columns are named `synthetic->{field_name}`. Identifiers, titles,
+authors, genres, and series data are emitted from the source records rather than as
+synthetic canonical fields. Source columns are named
 `{export-relative/path/to/file}->{field_name}`; nested JSON field names retain their
 object path, such as `rights.acquiredDate`. Numbered files are rewritten as
 `{directory}/shard.{extension}` only when at least two siblings share the same base

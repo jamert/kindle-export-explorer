@@ -168,8 +168,10 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert resource_type in raw_rows[0]
     assert origin_type in raw_rows[0]
     assert all(name.startswith("synthetic->") or "->" in name for name in raw_rows[0])
-    assert not any(name.endswith("Product Name") for name in raw_rows[0])
-    sample = next(row for row in raw_rows if row["synthetic->asin"] == "SAMPLE")
+    asin_field = f"{source}->resource.ASIN"
+    title_field = f"{source}->resource.Product Name"
+    sample = next(row for row in raw_rows if row[asin_field] == "SAMPLE")
+    assert sample[title_field] == "A Book Sample"
     assert sample[resource_type] == "KindleEBookSample"
     assert sample[origin_type] == "Sample"
 
@@ -214,17 +216,32 @@ def test_raw_mode_exposes_three_acquisition_date_sources(tmp_path: Path) -> None
     runner = CliRunner()
     result = runner.invoke(main, ["--raw", "--source", "all", str(tmp_path)])
     assert result.exit_code == 0
-    rows = {
-        row["synthetic->asin"] or row["synthetic->document_id"]: row
-        for row in csv.DictReader(result.output.splitlines(), dialect="excel-tab")
-    }
-    assert rows["KINDLE"][
+    rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
+    kindle = next(
+        row
+        for row in rows
+        if row[
+            "Digital.Content.Ownership/Digital.Content.Ownership.1.json->resource.ASIN"
+        ]
+        == "KINDLE"
+    )
+    printed = next(
+        row
+        for row in rows
+        if row["uli/CustomerRelationshipIndex.1.csv->ASIN"] == "PRINT"
+    )
+    document = next(
+        row
+        for row in rows
+        if row["Kindle.KindleDocs.DocumentMetadata.csv->DocumentId"] == "DOC-1"
+    )
+    assert kindle[
         "Digital.Content.Ownership/Digital.Content.Ownership.1.json->rights.acquiredDate"
     ] == "2024-01-02T03:04:05.000Z"
-    assert rows["PRINT"][
+    assert printed[
         "uli/CustomerRelationshipIndex.1.csv->Relationship Creation Date"
     ] == "2023-02-03T04:05:06Z"
-    assert rows["DOC-1"][
+    assert document[
         "Kindle.KindleDocs.DocumentMetadata.csv->EntryCreationDate"
     ] == "2022-03-04T05:06:07Z"
 
@@ -311,7 +328,12 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, ["--raw", str(tmp_path)])
     assert result.exit_code == 0
     rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
-    assert [row["synthetic->asin"] for row in rows] == ["BOOK"]
+    assert [
+        row[
+            "Digital.Content.Ownership/Digital.Content.Ownership.1.json->resource.ASIN"
+        ]
+        for row in rows
+    ] == ["BOOK"]
     assert not any(
         name.startswith(
             (
@@ -348,13 +370,11 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         lines = result.output.splitlines()
         assert len(lines) == 1
         record = json.loads(lines[0])
-        assert record["synthetic->title"] == "Échantillon"
-        assert record["synthetic->authors"] == []
-        assert record["synthetic->genres"] == []
+        prefix = "Digital.Content.Ownership/Digital.Content.Ownership.1.json"
+        assert record[f"{prefix}->resource.ASIN"] == "SAMPLE"
+        assert record[f"{prefix}->resource.Product Name"] == "Échantillon"
         assert record["synthetic->is_sample"] is True
-        assert record[
-            "Digital.Content.Ownership/Digital.Content.Ownership.1.json->resource.resourceType"
-        ] == "KindleEBookSample"
+        assert record[f"{prefix}->resource.resourceType"] == "KindleEBookSample"
 
 
 def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:

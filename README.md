@@ -73,13 +73,16 @@ uv run kindle-books --exclude B008T9L6AM,DOC-123 /path/to/Kindle
 uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path/to/Kindle
 ```
 
-In raw mode, every header states its provenance. Computed canonical fields use
-`synthetic->{field_name}`; source fields use
+In raw mode, every header states its provenance. Only values actually computed by
+the tool use `synthetic->{field_name}`; currently these are `source` and `is_sample`.
+Fields read from the export use
 `{export-relative/path/to/file}->{field_name}`. JSON subfields retain their object
 path, for example:
 
 ```text
 synthetic->is_sample
+Digital.Content.Ownership/shard.json->resource.ASIN
+Digital.Content.Ownership/shard.json->resource.Product Name
 Digital.Content.Ownership/shard.json->rights.acquiredDate
 Kindle.UnifiedLibraryIndex/datasets/.../CustomerRelationshipIndex.1.1.csv->Our Price
 ```
@@ -87,9 +90,9 @@ Kindle.UnifiedLibraryIndex/datasets/.../CustomerRelationshipIndex.1.1.csv->Our P
 True numbered shard groups are normalized to `{directory}/shard.{extension}`, so
 packaging numbers do not create hundreds of sparse columns. Singleton numbered files
 retain their exact names. When several records in one normalized source provide
-different values, the values are joined with `; `. Source copies of canonical fields (identifiers, titles, authors,
-genres, and series metadata) are omitted; `series-ASIN` remains because it identifies
-the series rather than the book. Acquisition dates remain separate as ownership
+different values, the values are joined with `; `. Raw identifiers, titles, authors,
+genres, and series metadata retain their actual source paths instead of being
+relabeled as synthetic. Acquisition dates remain separate as ownership
 `rights.acquiredDate`, ULI `Relationship Creation Date`, and personal-document
 `EntryCreationDate`. See the ER diagram for canonical field precedence. Reading,
 annotation, synchronization, content-update, timestamp, and device activity

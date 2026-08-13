@@ -111,18 +111,17 @@ def main(
     extra_headers = raw_headers(books) if raw else []
     if json_lines:
         for book in books:
-            click.echo(
-                json.dumps(
-                    book.as_dict(extra_headers, synthetic_prefix=raw),
-                    ensure_ascii=False,
-                )
-            )
+            record = book.as_raw_dict(extra_headers) if raw else book.as_dict()
+            click.echo(json.dumps(record, ensure_ascii=False))
         return
 
     writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
-    canonical_headers = [f"synthetic->{name}" for name in HEADERS] if raw else HEADERS
-    writer.writerow([*canonical_headers, *extra_headers])
-    writer.writerows(book.as_row(extra_headers) for book in books)
+    if raw:
+        writer.writerow(["synthetic->source", "synthetic->is_sample", *extra_headers])
+        writer.writerows(book.as_raw_row(extra_headers) for book in books)
+    else:
+        writer.writerow(HEADERS)
+        writer.writerows(book.as_row() for book in books)
 
 
 __all__ = ["main", "reconstruct_books"]
