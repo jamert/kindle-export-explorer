@@ -53,12 +53,13 @@ uv run kindle-books --jsonl /path/to/Kindle > books.jsonl
 uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 ```
 
-Select one or more records with a comma-separated, case-insensitive ASIN filter. It
-works with both TSV and JSON Lines output:
+Select one or more records with a comma-separated, case-insensitive list of ASINs or
+personal-document IDs. `--include` works with both TSV and JSON Lines output and can
+mix both identifier types:
 
 ```console
-uv run kindle-books --asin B00B7NPRY8,B008T9L6AM /path/to/Kindle
-uv run kindle-books --jsonl --asin B00B7NPRY8 /path/to/Kindle
+uv run kindle-books --include B00B7NPRY8,B008T9L6AM /path/to/Kindle
+uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 /path/to/Kindle
 ```
 
 Raw columns are namespaced by dataset (for example,

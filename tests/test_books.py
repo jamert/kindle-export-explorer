@@ -265,7 +265,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert record["raw.ownership.resource.resourceType"] == "KindleEBookSample"
 
 
-def test_asin_filter_works_with_tsv_and_jsonl(tmp_path: Path) -> None:
+def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
     for number, asin in enumerate(("BOOK1", "BOOK2", "BOOK3"), 1):
@@ -283,22 +283,38 @@ def test_asin_filter_works_with_tsv_and_jsonl(tmp_path: Path) -> None:
             encoding="utf-8",
         )
 
+    write_csv(
+        tmp_path,
+        "Kindle.KindleDocs.DocumentMetadata.csv",
+        ["DocumentId", "Title", "Filename"],
+        [["DOC-123", "Personal Document", "document.pdf"]],
+    )
+
     runner = CliRunner()
-    tsv_result = runner.invoke(main, ["--asin", " book1,BOOK3 ", str(tmp_path)])
+    tsv_result = runner.invoke(
+        main, ["--include", " book1,DOC-123 ", str(tmp_path)]
+    )
     assert tsv_result.exit_code == 0
     tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
-    assert {row["asin"] for row in tsv_rows} == {"BOOK1", "BOOK3"}
+    assert {(row["asin"], row["document_id"]) for row in tsv_rows} == {
+        ("BOOK1", ""),
+        ("", "DOC-123"),
+    }
 
     json_result = runner.invoke(
-        main, ["--jsonl", "--asin", "BOOK2,missing", str(tmp_path)]
+        main, ["--jsonl", "--include", "BOOK2,missing", str(tmp_path)]
     )
     assert json_result.exit_code == 0
     json_rows = [json.loads(line) for line in json_result.output.splitlines()]
     assert [row["asin"] for row in json_rows] == ["BOOK2"]
 
-    empty_result = runner.invoke(main, ["--asin", " , ", str(tmp_path)])
+    empty_result = runner.invoke(main, ["--include", " , ", str(tmp_path)])
     assert empty_result.exit_code != 0
-    assert "provide at least one ASIN" in empty_result.output
+    assert "provide at least one ASIN or document ID" in empty_result.output
+
+    removed_result = runner.invoke(main, ["--asin", "BOOK1", str(tmp_path)])
+    assert removed_result.exit_code != 0
+    assert "No such option '--asin'" in removed_result.output
 
 
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:

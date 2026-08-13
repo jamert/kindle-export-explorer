@@ -39,9 +39,9 @@ from .books import ExportError, HEADERS, raw_headers, reconstruct_books
     help="Write one JSON object per line instead of TSV.",
 )
 @click.option(
-    "--asin",
-    metavar="ASIN[,ASIN...]",
-    help="Only emit records with one of these comma-separated ASINs.",
+    "--include",
+    metavar="ID[,ID...]",
+    help="Only emit records matching these comma-separated ASINs or document IDs.",
 )
 @click.argument(
     "export_directory",
@@ -54,7 +54,7 @@ def main(
     source: str,
     raw: bool,
     json_lines: bool,
-    asin: str | None,
+    include: str | None,
 ) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
@@ -67,15 +67,20 @@ def main(
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    if asin is not None:
-        requested_asins = {
-            value.strip().casefold() for value in asin.split(",") if value.strip()
+    if include is not None:
+        requested_ids = {
+            value.strip().casefold() for value in include.split(",") if value.strip()
         }
-        if not requested_asins:
+        if not requested_ids:
             raise click.BadParameter(
-                "provide at least one ASIN", param_hint="--asin"
+                "provide at least one ASIN or document ID", param_hint="--include"
             )
-        books = [book for book in books if book.asin.casefold() in requested_asins]
+        books = [
+            book
+            for book in books
+            if book.asin.casefold() in requested_ids
+            or book.document_id.casefold() in requested_ids
+        ]
 
     extra_headers = raw_headers(books) if raw else []
     if json_lines:
