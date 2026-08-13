@@ -343,23 +343,51 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
             encoding="utf-8",
         )
 
+    (ownership / "Digital.Content.Ownership.4.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "SAMPLE",
+                    "Product Name": "Sample Book",
+                    "resourceType": "KindleEBookSample",
+                },
+                "rights": [{"origin": {"originType": "Sample"}}],
+            }
+        ),
+        encoding="utf-8",
+    )
     write_csv(
         tmp_path,
         "Kindle.KindleDocs.DocumentMetadata.csv",
         ["DocumentId", "Title", "Filename"],
         [["DOC-123", "Personal Document", "document.pdf"]],
     )
+    write_csv(
+        tmp_path,
+        "uli/CustomerRelationshipIndex.csv",
+        ["ASIN", "Product Name", "Resource Type", "Ownership Type"],
+        [["PRINT", "Print Book", "ITEM", "Item Owner"]],
+    )
 
     runner = CliRunner()
     tsv_result = runner.invoke(
-        main, ["--include", " book1,DOC-123 ", str(tmp_path)]
+        main,
+        ["--include", " book1,DOC-123,SAMPLE,PRINT ", str(tmp_path)],
     )
     assert tsv_result.exit_code == 0
     tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
     assert {(row["asin"], row["document_id"]) for row in tsv_rows} == {
         ("BOOK1", ""),
+        ("SAMPLE", ""),
+        ("PRINT", ""),
         ("", "DOC-123"),
     }
+    assert next(row for row in tsv_rows if row["asin"] == "SAMPLE")["is_sample"] == (
+        "true"
+    )
+    assert next(row for row in tsv_rows if row["asin"] == "PRINT")["source"] == (
+        "print"
+    )
 
     json_result = runner.invoke(
         main, ["--jsonl", "--include", "BOOK2,missing", str(tmp_path)]

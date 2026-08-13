@@ -63,16 +63,7 @@ def main(
     exclude: str | None,
 ) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
-    try:
-        books = reconstruct_books(
-            export_directory,
-            show_default=show_default,
-            show_samples=show_samples,
-            source=source,
-        )
-    except ExportError as exc:
-        raise click.ClickException(str(exc)) from exc
-
+    requested_ids: set[str] | None = None
     if include is not None:
         requested_ids = {
             value.strip().casefold() for value in include.split(",") if value.strip()
@@ -81,6 +72,20 @@ def main(
             raise click.BadParameter(
                 "provide at least one ASIN or document ID", param_hint="--include"
             )
+
+    try:
+        books = reconstruct_books(
+            export_directory,
+            # Explicit IDs override all category filters. Exclusion is still
+            # applied below and therefore always wins.
+            show_default=True if requested_ids is not None else show_default,
+            show_samples=True if requested_ids is not None else show_samples,
+            source="all" if requested_ids is not None else source,
+        )
+    except ExportError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if requested_ids is not None:
         books = [
             book
             for book in books

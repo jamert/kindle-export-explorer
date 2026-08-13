@@ -55,7 +55,9 @@ uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 
 Select one or more records with a comma-separated, case-insensitive list of ASINs or
 personal-document IDs. `--include` works with both TSV and JSON Lines output and can
-mix both identifier types:
+mix both identifier types. Explicit IDs override the source, sample, and default-
+content filters, so requested print books, samples, dictionaries, and user guides are
+returned without their corresponding `--source` or `--show-*` options:
 
 ```console
 uv run kindle-books --include B00B7NPRY8,B008T9L6AM /path/to/Kindle
@@ -63,8 +65,8 @@ uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 /path/to/Kindle
 ```
 
 Exclude ASINs or document IDs with the equivalent `--exclude` filter. Unknown or
-already-filtered identifiers have no effect. When combined, inclusion is applied
-first and exclusion wins:
+already-filtered identifiers have no effect. When combined, inclusion overrides the
+category filters first, then exclusion wins:
 
 ```console
 uv run kindle-books --exclude B008T9L6AM,DOC-123 /path/to/Kindle
