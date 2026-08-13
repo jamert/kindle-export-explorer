@@ -5,7 +5,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from kindle_export_reassembly import main
-from kindle_export_reassembly.books import reconstruct_books
+from kindle_export_reassembly.books import normalize_sharded_path, reconstruct_books
 
 
 def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
@@ -15,6 +15,29 @@ def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str
         writer = csv.writer(stream)
         writer.writerow(headers)
         writer.writerows(rows)
+
+
+def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path) -> None:
+    shards = tmp_path / "Digital.Content.Ownership"
+    shards.mkdir()
+    first = shards / "Digital.Content.Ownership.1.json"
+    second = shards / "Digital.Content.Ownership.2.json"
+    first.touch()
+    second.touch()
+
+    versioned = tmp_path / "dataset" / "CustomerGenres.2.1.csv"
+    versioned.parent.mkdir()
+    versioned.touch()
+
+    assert normalize_sharded_path(tmp_path, first) == (
+        "Digital.Content.Ownership/shard.json"
+    )
+    assert normalize_sharded_path(tmp_path, second) == (
+        "Digital.Content.Ownership/shard.json"
+    )
+    assert normalize_sharded_path(tmp_path, versioned) == (
+        "dataset/CustomerGenres.2.1.csv"
+    )
 
 
 def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path) -> None:
@@ -139,15 +162,16 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert "\ttrue\n" in shown_result.output
     assert raw_result.exit_code == 0
     raw_rows = list(csv.DictReader(raw_result.output.splitlines(), dialect="excel-tab"))
-    assert "raw.ownership.resource.resourceType" in raw_rows[0]
-    assert "raw.ownership.origin.originType" in raw_rows[0]
-    assert not any(
-        name.casefold().endswith((".asin", ".item-asin")) for name in raw_rows[0]
-    )
-    assert not any(name.endswith(".Product Name") for name in raw_rows[0])
-    sample = next(row for row in raw_rows if row["asin"] == "SAMPLE")
-    assert sample["raw.ownership.resource.resourceType"] == "KindleEBookSample"
-    assert sample["raw.ownership.origin.originType"] == "Sample"
+    source = "Digital.Content.Ownership/shard.json"
+    resource_type = f"{source}->resource.resourceType"
+    origin_type = f"{source}->rights.origin.originType"
+    assert resource_type in raw_rows[0]
+    assert origin_type in raw_rows[0]
+    assert all(name.startswith("synthetic->") or "->" in name for name in raw_rows[0])
+    assert not any(name.endswith("Product Name") for name in raw_rows[0])
+    sample = next(row for row in raw_rows if row["synthetic->asin"] == "SAMPLE")
+    assert sample[resource_type] == "KindleEBookSample"
+    assert sample[origin_type] == "Sample"
 
 
 def test_raw_mode_exposes_three_acquisition_date_sources(tmp_path: Path) -> None:
@@ -191,18 +215,18 @@ def test_raw_mode_exposes_three_acquisition_date_sources(tmp_path: Path) -> None
     result = runner.invoke(main, ["--raw", "--source", "all", str(tmp_path)])
     assert result.exit_code == 0
     rows = {
-        row["asin"] or row["document_id"]: row
+        row["synthetic->asin"] or row["synthetic->document_id"]: row
         for row in csv.DictReader(result.output.splitlines(), dialect="excel-tab")
     }
-    assert rows["KINDLE"]["raw.ownership.right.acquiredDate"] == (
-        "2024-01-02T03:04:05.000Z"
-    )
-    assert rows["PRINT"]["raw.library.relationship.Relationship Creation Date"] == (
-        "2023-02-03T04:05:06Z"
-    )
-    assert rows["DOC-1"]["raw.personal_document.EntryCreationDate"] == (
-        "2022-03-04T05:06:07Z"
-    )
+    assert rows["KINDLE"][
+        "Digital.Content.Ownership/Digital.Content.Ownership.1.json->rights.acquiredDate"
+    ] == "2024-01-02T03:04:05.000Z"
+    assert rows["PRINT"][
+        "uli/CustomerRelationshipIndex.1.csv->Relationship Creation Date"
+    ] == "2023-02-03T04:05:06Z"
+    assert rows["DOC-1"][
+        "Kindle.KindleDocs.DocumentMetadata.csv->EntryCreationDate"
+    ] == "2022-03-04T05:06:07Z"
 
     plain_result = runner.invoke(main, ["--source", "all", str(tmp_path)])
     assert plain_result.exit_code == 0
@@ -287,9 +311,15 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, ["--raw", str(tmp_path)])
     assert result.exit_code == 0
     rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
-    assert [row["asin"] for row in rows] == ["BOOK"]
+    assert [row["synthetic->asin"] for row in rows] == ["BOOK"]
     assert not any(
-        name.startswith(("raw.whispersync.", "raw.content_update.", "raw.completed_title."))
+        name.startswith(
+            (
+                "Digital.Content.Whispersync/",
+                "Kindle.KindleContentUpdate/",
+                "Kindle.ReadingInsights/",
+            )
+        )
         for name in rows[0]
     )
 
@@ -318,11 +348,13 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         lines = result.output.splitlines()
         assert len(lines) == 1
         record = json.loads(lines[0])
-        assert record["title"] == "Échantillon"
-        assert record["authors"] == []
-        assert record["genres"] == []
-        assert record["is_sample"] is True
-        assert record["raw.ownership.resource.resourceType"] == "KindleEBookSample"
+        assert record["synthetic->title"] == "Échantillon"
+        assert record["synthetic->authors"] == []
+        assert record["synthetic->genres"] == []
+        assert record["synthetic->is_sample"] is True
+        assert record[
+            "Digital.Content.Ownership/Digital.Content.Ownership.1.json->resource.resourceType"
+        ] == "KindleEBookSample"
 
 
 def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,33 +84,36 @@ class Book:
 
     def add_raw(
         self,
-        namespace: str,
+        source_path: str,
         values: Mapping[str, object],
         fields: Iterable[str] | None = None,
     ) -> None:
-        """Retain non-empty source values, preserving conflicting/repeated values."""
+        """Retain non-empty source values with their exact file provenance."""
         names = fields if fields is not None else values.keys()
         for name in names:
             # Canonical columns use an explicit source-precedence policy. Do not
             # duplicate those values in raw output. Saga's series-ASIN is retained
             # because it identifies a different entity.
-            if name.casefold() in _CANONICAL_RAW_FIELDS:
+            if name.rsplit(".", 1)[-1].casefold() in _CANONICAL_RAW_FIELDS:
                 continue
             value = clean(values.get(name))
             if value:
-                self.raw_fields.setdefault(f"raw.{namespace}.{name}", set()).add(value)
+                self.raw_fields.setdefault(f"{source_path}->{name}", set()).add(value)
 
-    def as_dict(self, raw_headers: Iterable[str] = ()) -> dict[str, object]:
+    def as_dict(
+        self, raw_headers: Iterable[str] = (), *, synthetic_prefix: bool = False
+    ) -> dict[str, object]:
+        prefix = "synthetic->" if synthetic_prefix else ""
         result: dict[str, object] = {
-            "asin": self.asin,
-            "document_id": self.document_id,
-            "title": self.title,
-            "authors": sorted(self.authors, key=str.casefold),
-            "genres": sorted(self.genres, key=str.casefold),
-            "series_title": self.series_title,
-            "series_position": self.series_position,
-            "source": self.source,
-            "is_sample": self.is_sample,
+            f"{prefix}asin": self.asin,
+            f"{prefix}document_id": self.document_id,
+            f"{prefix}title": self.title,
+            f"{prefix}authors": sorted(self.authors, key=str.casefold),
+            f"{prefix}genres": sorted(self.genres, key=str.casefold),
+            f"{prefix}series_title": self.series_title,
+            f"{prefix}series_position": self.series_position,
+            f"{prefix}source": self.source,
+            f"{prefix}is_sample": self.is_sample,
         }
         result.update(
             {
@@ -158,11 +162,40 @@ def raw_headers(books: Iterable[Book]) -> list[str]:
     return sorted({name for book in books for name in book.raw_fields}, key=str.casefold)
 
 
-def _csv_rows(paths: Iterable[Path]) -> Iterator[dict[str, str]]:
+_NUMBERED_SHARD = re.compile(r"^(?P<base>.+)\.(?P<number>\d+)(?P<extension>\.[^.]+)$")
+
+
+def normalize_sharded_path(root: Path, path: Path) -> str:
+    """Return an export-relative provenance path, collapsing real shard groups.
+
+    A numbered file is considered a shard only when its directory contains another
+    file with the same base and extension but a different numeric suffix. Singleton
+    versioned files therefore retain their exact names.
+    """
+    match = _NUMBERED_SHARD.match(path.name)
+    if match:
+        pattern = f"{match.group('base')}.*{match.group('extension')}"
+        matching_siblings = (
+            sibling
+            for sibling in path.parent.glob(pattern)
+            if (sibling_match := _NUMBERED_SHARD.match(sibling.name))
+            and sibling_match.group("base") == match.group("base")
+            and sibling_match.group("extension") == match.group("extension")
+        )
+        if sum(1 for _ in matching_siblings) > 1:
+            path = path.with_name(f"shard{match.group('extension')}")
+    return path.relative_to(root).as_posix()
+
+
+def _csv_rows(
+    root: Path, paths: Iterable[Path]
+) -> Iterator[tuple[str, dict[str, str]]]:
     for path in paths:
         try:
             with path.open(encoding="utf-8-sig", newline="") as stream:
-                yield from csv.DictReader(stream)
+                source_path = normalize_sharded_path(root, path)
+                for row in csv.DictReader(stream):
+                    yield source_path, row
         except (OSError, UnicodeError, csv.Error) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
 
@@ -226,18 +259,32 @@ def reconstruct_books(
             raise ExportError(f"cannot read {path}: {exc}") from exc
         book = get(resource.get("ASIN"))
         if book:
+            source_path = normalize_sharded_path(root, path)
             book.source = "kindle"
             book.set_title(resource.get("Product Name"), 30)
-            book.add_raw("ownership.resource", resource)
+            book.add_raw(
+                source_path,
+                {f"resource.{name}": value for name, value in resource.items()},
+            )
             for right in data.get("rights", []):
                 if not isinstance(right, dict):
                     continue
                 book.add_raw(
-                    "ownership.right", right, ("rightType", "acquiredDate")
+                    source_path,
+                    {
+                        "rights.rightType": right.get("rightType"),
+                        "rights.acquiredDate": right.get("acquiredDate"),
+                    },
                 )
                 origin = right.get("origin", {})
                 if isinstance(origin, dict):
-                    book.add_raw("ownership.origin", origin)
+                    book.add_raw(
+                        source_path,
+                        {
+                            f"rights.origin.{name}": value
+                            for name, value in origin.items()
+                        },
+                    )
             origins = {
                 clean(right.get("origin", {}).get("originType")).casefold()
                 for right in data.get("rights", [])
@@ -256,9 +303,9 @@ def reconstruct_books(
     relationship_paths = _files_named(root, "CustomerRelationshipIndex")
     if relationship_paths:
         recognized = True
-    relationship_rows = list(_csv_rows(relationship_paths))
+    relationship_rows = list(_csv_rows(root, relationship_paths))
     owner_types = {"item owner", "sample owner"}
-    for row in relationship_rows:
+    for source_path, row in relationship_rows:
         if clean(row.get("Resource Type")).casefold() != "item":
             continue
         if clean(row.get("Ownership Type")).casefold() not in owner_types:
@@ -272,7 +319,7 @@ def reconstruct_books(
             if existing is None:
                 book.source = "print"
             book.add_raw(
-                "library.relationship",
+                source_path,
                 row,
                 (
                     "Product Name",
@@ -299,25 +346,25 @@ def reconstruct_books(
     book_relation_paths = _files_named(root, "BookRelation.csv")
     if book_relation_paths:
         recognized = True
-    for row in _csv_rows(book_relation_paths):
+    for source_path, row in _csv_rows(root, book_relation_paths):
         if not clean(row.get("Product Name")):
             continue
         book = get(row.get("ASIN"))
         if book:
             book.source = "kindle"
-            book.add_raw("book_relation", row, ("ASIN", "Product Name"))
+            book.add_raw(source_path, row, ("ASIN", "Product Name"))
             book.set_title(row.get("Product Name"), 35)
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
     document_paths = _files_named(root, "DocumentMetadata")
     if document_paths:
         recognized = True
-    for row in _csv_rows(document_paths):
+    for source_path, row in _csv_rows(root, document_paths):
         book = get(document_id=row.get("DocumentId"))
         if book:
             book.source = "kindle"
             book.add_raw(
-                "personal_document",
+                source_path,
                 row,
                 tuple(name for name in row if name != "HasBeenDeleted"),
             )
@@ -327,7 +374,7 @@ def reconstruct_books(
     saga_paths = _files_named(root, "CollectionRightsDatastore")
     if saga_paths:
         recognized = True
-    for row in _csv_rows(saga_paths):
+    for source_path, row in _csv_rows(root, saga_paths):
         if clean(row.get("record-type")).casefold() != "item":
             continue
         item_asin = clean_item_asin(row.get("item-ASIN"))
@@ -338,7 +385,7 @@ def reconstruct_books(
         if book:
             book.source = "kindle"
             book.add_raw(
-                "series",
+                source_path,
                 row,
                 (
                     "record-type",
@@ -354,32 +401,38 @@ def reconstruct_books(
 
     # Enrich established books from metadata-only ULI relations. These files do
     # not seed records, preventing recommendations and wish-list items leaking in.
-    for row in _csv_rows(_files_named(root, "CustomerAuthorNameRelationship")):
+    for source_path, row in _csv_rows(
+        root, _files_named(root, "CustomerAuthorNameRelationship")
+    ):
         book = books.get(clean(row.get("ASIN")))
         author = clean(row.get("Author Name"))
         if book and author:
             book.authors.add(author)
-            book.add_raw("author", row)
-    for row in _csv_rows(_files_named(root, "CustomerAuthorIdRelationship")):
+            book.add_raw(source_path, row)
+    for source_path, row in _csv_rows(
+        root, _files_named(root, "CustomerAuthorIdRelationship")
+    ):
         book = books.get(clean(row.get("ASIN")))
         if book:
-            book.add_raw("author_id", row)
-    for row in _csv_rows(_files_named(root, "CustomerGenres")):
+            book.add_raw(source_path, row)
+    for source_path, row in _csv_rows(root, _files_named(root, "CustomerGenres")):
         book = books.get(clean(row.get("ASIN")))
         genre = clean(row.get("Genre"))
         if book and genre:
             book.genres.add(genre)
-            book.add_raw("genre", row)
-    for row in _csv_rows(_files_named(root, "CustomerRelationshipTypes")):
+            book.add_raw(source_path, row)
+    for source_path, row in _csv_rows(
+        root, _files_named(root, "CustomerRelationshipTypes")
+    ):
         book = books.get(clean(row.get("ASIN")))
         if book and clean(row.get("Ownership Type")).casefold() in owner_types:
-            book.add_raw("library.relationship_type", row)
+            book.add_raw(source_path, row)
     book_tag_groups = {"author", "catalog", "genre", "media-concept-node"}
-    for row in _csv_rows(_files_named(root, "CustomerTags")):
+    for source_path, row in _csv_rows(root, _files_named(root, "CustomerTags")):
         book = books.get(clean(row.get("ASIN")))
         if book and clean(row.get("Tag Source Group")).casefold() in book_tag_groups:
             book.add_raw(
-                "library.tag",
+                source_path,
                 row,
                 (
                     "Tag Name",

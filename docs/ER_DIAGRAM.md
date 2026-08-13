@@ -158,12 +158,22 @@ example, ULI `Resource Type` (`ITEM`) and Digital Ownership `resourceType`
 (`KindleEBook`, `KindleEBookSample`, etc.) describe different layers and both remain.
 Likewise, `series-ASIN` identifies the series, not the book.
 
-In `--raw` mode, acquisition-related dates remain separate because they come from
-three different entity types and do not have identical semantics:
+In `--raw` mode, every field carries explicit provenance. Synthesized columns are
+named `synthetic->{field_name}`. Source columns are named
+`{export-relative/path/to/file}->{field_name}`; nested JSON field names retain their
+object path, such as `rights.acquiredDate`. Numbered files are rewritten as
+`{directory}/shard.{extension}` only when at least two siblings share the same base
+name and extension; singleton numbered/versioned files keep their exact paths.
 
-- `raw.ownership.right.acquiredDate` for Kindle ownership rights
-- `raw.library.relationship.Relationship Creation Date` for ULI ownership relations
-- `raw.personal_document.EntryCreationDate` for personal documents
+Acquisition-related dates remain separate because they come from three different
+entity types and do not have identical semantics:
+
+- `Digital.Content.Ownership/shard.json->rights.acquiredDate` for Kindle ownership
+  rights
+- the applicable `CustomerRelationshipIndex` CSV path followed by
+  `->Relationship Creation Date` for ULI ownership relations
+- the `DocumentMetadata` CSV path followed by `->EntryCreationDate` for personal
+  documents
 
 ## Classification derived from provenance
 

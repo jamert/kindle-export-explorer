@@ -73,14 +73,25 @@ uv run kindle-books --exclude B008T9L6AM,DOC-123 /path/to/Kindle
 uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path/to/Kindle
 ```
 
-Raw columns are namespaced by dataset (for example,
-`raw.ownership.resource.resourceType` and `raw.library.relationship.Our Price`). When
-several source records provide different values, the values are joined with `; `.
-Source copies of canonical fields (identifiers, titles, authors, genres, and series
-metadata) are omitted; `series-ASIN` remains because it identifies the series rather
-than the book. Acquisition dates remain separate as ownership `acquiredDate`, ULI
-`Relationship Creation Date`, and personal-document `EntryCreationDate`. See the ER
-diagram for canonical field precedence. Reading,
+In raw mode, every header states its provenance. Computed canonical fields use
+`synthetic->{field_name}`; source fields use
+`{export-relative/path/to/file}->{field_name}`. JSON subfields retain their object
+path, for example:
+
+```text
+synthetic->is_sample
+Digital.Content.Ownership/shard.json->rights.acquiredDate
+Kindle.UnifiedLibraryIndex/datasets/.../CustomerRelationshipIndex.1.1.csv->Our Price
+```
+
+True numbered shard groups are normalized to `{directory}/shard.{extension}`, so
+packaging numbers do not create hundreds of sparse columns. Singleton numbered files
+retain their exact names. When several records in one normalized source provide
+different values, the values are joined with `; `. Source copies of canonical fields (identifiers, titles, authors,
+genres, and series metadata) are omitted; `series-ASIN` remains because it identifies
+the series rather than the book. Acquisition dates remain separate as ownership
+`rights.acquiredDate`, ULI `Relationship Creation Date`, and personal-document
+`EntryCreationDate`. See the ER diagram for canonical field precedence. Reading,
 annotation, synchronization, content-update, timestamp, and device activity
 tables are not used.
 
