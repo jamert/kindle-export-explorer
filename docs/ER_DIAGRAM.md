@@ -24,6 +24,7 @@ erDiagram
     }
     OWNERSHIP_RIGHT {
         string right_type
+        datetime acquired_date
     }
     OWNERSHIP_ORIGIN {
         string origin_type "Purchase, Sample, KindleDictionary, etc."
@@ -41,6 +42,7 @@ erDiagram
         string series_author
         string series_position
         string marketplace
+        datetime relationship_creation_date
     }
     LIBRARY_RELATIONSHIP_TYPE {
         string asin FK
@@ -88,6 +90,7 @@ erDiagram
         string original_type
         integer size_bytes
         string conversion_metadata
+        datetime entry_creation_date
     }
 
     BOOK ||--o{ DIGITAL_OWNERSHIP : "identified by ASIN"
@@ -154,6 +157,13 @@ Distinct fields are not collapsed merely because their names are similar. For
 example, ULI `Resource Type` (`ITEM`) and Digital Ownership `resourceType`
 (`KindleEBook`, `KindleEBookSample`, etc.) describe different layers and both remain.
 Likewise, `series-ASIN` identifies the series, not the book.
+
+In `--raw` mode, acquisition-related dates remain separate because they come from
+three different entity types and do not have identical semantics:
+
+- `raw.ownership.right.acquiredDate` for Kindle ownership rights
+- `raw.library.relationship.Relationship Creation Date` for ULI ownership relations
+- `raw.personal_document.EntryCreationDate` for personal documents
 
 ## Classification derived from provenance
 

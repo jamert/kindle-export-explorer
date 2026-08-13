@@ -150,6 +150,66 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert sample["raw.ownership.origin.originType"] == "Sample"
 
 
+def test_raw_mode_exposes_three_acquisition_date_sources(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    (ownership / "Digital.Content.Ownership.1.json").write_text(
+        json.dumps(
+            {
+                "resource": {"ASIN": "KINDLE", "Product Name": "Kindle Book"},
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-02T03:04:05.000Z",
+                        "origin": {"originType": "Purchase"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    write_csv(
+        tmp_path,
+        "uli/CustomerRelationshipIndex.1.csv",
+        [
+            "ASIN",
+            "Product Name",
+            "Resource Type",
+            "Ownership Type",
+            "Relationship Creation Date",
+        ],
+        [["PRINT", "Print Book", "ITEM", "Item Owner", "2023-02-03T04:05:06Z"]],
+    )
+    write_csv(
+        tmp_path,
+        "Kindle.KindleDocs.DocumentMetadata.csv",
+        ["DocumentId", "Title", "EntryCreationDate"],
+        [["DOC-1", "Personal Document", "2022-03-04T05:06:07Z"]],
+    )
+
+    runner = CliRunner()
+    result = runner.invoke(main, ["--raw", "--source", "all", str(tmp_path)])
+    assert result.exit_code == 0
+    rows = {
+        row["asin"] or row["document_id"]: row
+        for row in csv.DictReader(result.output.splitlines(), dialect="excel-tab")
+    }
+    assert rows["KINDLE"]["raw.ownership.right.acquiredDate"] == (
+        "2024-01-02T03:04:05.000Z"
+    )
+    assert rows["PRINT"]["raw.library.relationship.Relationship Creation Date"] == (
+        "2023-02-03T04:05:06Z"
+    )
+    assert rows["DOC-1"]["raw.personal_document.EntryCreationDate"] == (
+        "2022-03-04T05:06:07Z"
+    )
+
+    plain_result = runner.invoke(main, ["--source", "all", str(tmp_path)])
+    assert plain_result.exit_code == 0
+    assert "acquiredDate" not in plain_result.output.splitlines()[0]
+    assert "EntryCreationDate" not in plain_result.output.splitlines()[0]
+
+
 def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()

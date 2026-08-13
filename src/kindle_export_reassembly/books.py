@@ -232,7 +232,9 @@ def reconstruct_books(
             for right in data.get("rights", []):
                 if not isinstance(right, dict):
                     continue
-                book.add_raw("ownership.right", right, ("rightType",))
+                book.add_raw(
+                    "ownership.right", right, ("rightType", "acquiredDate")
+                )
                 origin = right.get("origin", {})
                 if isinstance(origin, dict):
                     book.add_raw("ownership.origin", origin)
@@ -284,6 +286,7 @@ def reconstruct_books(
                     "Relation Type",
                     "Position In Collection",
                     "Marketplace",
+                    "Relationship Creation Date",
                 ),
             )
             book.set_title(row.get("Product Name"), 50)
@@ -316,7 +319,7 @@ def reconstruct_books(
             book.add_raw(
                 "personal_document",
                 row,
-                tuple(name for name in row if name not in {"HasBeenDeleted", "EntryCreationDate"}),
+                tuple(name for name in row if name != "HasBeenDeleted"),
             )
             book.set_title(row.get("Title"), 50)
 

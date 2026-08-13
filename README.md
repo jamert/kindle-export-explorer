@@ -76,7 +76,9 @@ Raw columns are namespaced by dataset (for example,
 several source records provide different values, the values are joined with `; `.
 Source copies of canonical fields (identifiers, titles, authors, genres, and series
 metadata) are omitted; `series-ASIN` remains because it identifies the series rather
-than the book. See the ER diagram for canonical field precedence. Reading,
+than the book. Acquisition dates remain separate as ownership `acquiredDate`, ULI
+`Relationship Creation Date`, and personal-document `EntryCreationDate`. See the ER
+diagram for canonical field precedence. Reading,
 annotation, synchronization, content-update, timestamp, and device activity
 tables are not used.
 
