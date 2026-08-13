@@ -62,6 +62,15 @@ uv run kindle-books --include B00B7NPRY8,B008T9L6AM /path/to/Kindle
 uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 /path/to/Kindle
 ```
 
+Exclude ASINs or document IDs with the equivalent `--exclude` filter. Unknown or
+already-filtered identifiers have no effect. When combined, inclusion is applied
+first and exclusion wins:
+
+```console
+uv run kindle-books --exclude B008T9L6AM,DOC-123 /path/to/Kindle
+uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path/to/Kindle
+```
+
 Raw columns are namespaced by dataset (for example,
 `raw.ownership.resource.resourceType` and `raw.library.relationship.Our Price`). When
 several source records provide different values, the values are joined with `; `.

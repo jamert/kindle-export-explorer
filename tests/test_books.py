@@ -317,6 +317,65 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     assert "No such option '--asin'" in removed_result.output
 
 
+def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    for number, asin in enumerate(("BOOK1", "BOOK2", "BOOK3"), 1):
+        (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
+            json.dumps(
+                {
+                    "resource": {
+                        "ASIN": asin,
+                        "Product Name": f"Title {number}",
+                        "resourceType": "KindleEBook",
+                    },
+                    "rights": [{"origin": {"originType": "Purchase"}}],
+                }
+            ),
+            encoding="utf-8",
+        )
+    write_csv(
+        tmp_path,
+        "Kindle.KindleDocs.DocumentMetadata.csv",
+        ["DocumentId", "Title", "Filename"],
+        [["DOC-123", "Personal Document", "document.pdf"]],
+    )
+
+    runner = CliRunner()
+    tsv_result = runner.invoke(
+        main, ["--exclude", " book1,DOC-123,missing ", str(tmp_path)]
+    )
+    assert tsv_result.exit_code == 0
+    tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
+    assert {row["asin"] for row in tsv_rows} == {"BOOK2", "BOOK3"}
+
+    json_result = runner.invoke(
+        main,
+        [
+            "--jsonl",
+            "--include",
+            "BOOK1,BOOK2,DOC-123",
+            "--exclude",
+            "BOOK2,DOC-123",
+            str(tmp_path),
+        ],
+    )
+    assert json_result.exit_code == 0
+    json_rows = [json.loads(line) for line in json_result.output.splitlines()]
+    assert [row["asin"] for row in json_rows] == ["BOOK1"]
+
+    unknown_result = runner.invoke(main, ["--exclude", "missing", str(tmp_path)])
+    assert unknown_result.exit_code == 0
+    unknown_rows = list(
+        csv.DictReader(unknown_result.output.splitlines(), dialect="excel-tab")
+    )
+    assert len(unknown_rows) == 4
+
+    empty_result = runner.invoke(main, ["--exclude", " , ", str(tmp_path)])
+    assert empty_result.exit_code != 0
+    assert "provide at least one ASIN or document ID" in empty_result.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,

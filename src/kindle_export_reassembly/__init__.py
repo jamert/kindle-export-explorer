@@ -43,6 +43,11 @@ from .books import ExportError, HEADERS, raw_headers, reconstruct_books
     metavar="ID[,ID...]",
     help="Only emit records matching these comma-separated ASINs or document IDs.",
 )
+@click.option(
+    "--exclude",
+    metavar="ID[,ID...]",
+    help="Omit records matching these comma-separated ASINs or document IDs.",
+)
 @click.argument(
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
@@ -55,6 +60,7 @@ def main(
     raw: bool,
     json_lines: bool,
     include: str | None,
+    exclude: str | None,
 ) -> None:
     """Print book metadata reconstructed from EXPORT_DIRECTORY as TSV."""
     try:
@@ -80,6 +86,21 @@ def main(
             for book in books
             if book.asin.casefold() in requested_ids
             or book.document_id.casefold() in requested_ids
+        ]
+
+    if exclude is not None:
+        excluded_ids = {
+            value.strip().casefold() for value in exclude.split(",") if value.strip()
+        }
+        if not excluded_ids:
+            raise click.BadParameter(
+                "provide at least one ASIN or document ID", param_hint="--exclude"
+            )
+        books = [
+            book
+            for book in books
+            if book.asin.casefold() not in excluded_ids
+            and book.document_id.casefold() not in excluded_ids
         ]
 
     extra_headers = raw_headers(books) if raw else []
