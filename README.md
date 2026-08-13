@@ -107,6 +107,16 @@ Use `uv run kindle-books --help` for CLI help.
 See [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for the entity–relationship diagram,
 join keys, provenance rules, and currently unconnected entities.
 
+## Explore an export
+
+Generate a Markdown inventory of every CSV/JSON file and column, including record
+counts, unique and empty values, low-cardinality domains, examples, and key-like
+columns. True file shards are profiled as one dataset:
+
+```console
+uv run python scripts/explore_export.py /path/to/Kindle -o data-profile.md
+```
+
 ## Develop
 
 ```console
