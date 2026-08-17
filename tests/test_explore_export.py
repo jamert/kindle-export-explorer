@@ -28,7 +28,9 @@ def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
     csv_path = tmp_path / "metadata.csv"
     csv_path.write_text("id,kind,optional\n1,book,\n2,book,value\n", encoding="utf-8")
 
-    profiles, skipped = profile_export(tmp_path)
+    (tmp_path / "ignored.txt").write_text("ignored", encoding="utf-8")
+
+    profiles = profile_export(tmp_path)
     by_path = {profile.path: profile for profile in profiles}
     shard = by_path["ownership/shard.json"]
     assert shard.record_count == 2
@@ -41,10 +43,20 @@ def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
     metadata = by_path["metadata.csv"]
     assert metadata.columns["optional"].populated_records == 1
     assert metadata.columns["optional"].value_count == 1
-    assert skipped == []
 
     output = io.StringIO()
-    write_markdown(profiles, skipped, output)
+    write_markdown(profiles, output)
     report = output.getvalue()
+    assert "## Table of contents" in report
+    assert "- [`metadata.csv`](#dataset-1)" in report
+    assert "- [`ownership/*.json`](#dataset-2)" in report
+    assert '<a id="dataset-2"></a>' in report
+    assert "ignored.txt" not in report
+    assert "Unsupported files" not in report
+    assert "## `ownership/*.json`" in report
+    assert "## `ownership/shard.json`" not in report
+    assert "- Shards: `ownership/*.json`" in report
+    assert "records.1.json" not in report
+    assert "records.2.json" not in report
     assert "| `id` | 2 | 2 | 2 | 0 | yes |" in report
     assert 'all: "book"' in report

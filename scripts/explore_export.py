@@ -109,19 +109,17 @@ def _json_records(path: Path) -> Iterator[dict[str, list[object]]]:
             yield {"<value>": [record]}
 
 
-def profile_export(root: Path) -> tuple[list[DatasetProfile], list[str]]:
-    """Profile supported files under *root* and return datasets and skipped paths."""
+def profile_export(root: Path) -> list[DatasetProfile]:
+    """Profile supported files under *root*; silently ignore other file types."""
     root = root.expanduser().resolve()
     if not root.is_dir():
         raise ValueError(f"not a directory: {root}")
 
     profiles: dict[str, DatasetProfile] = {}
-    skipped: list[str] = []
     for path in sorted(item for item in root.rglob("*") if item.is_file()):
         relative = path.relative_to(root).as_posix()
         suffix = path.suffix.casefold()
         if suffix not in {".csv", ".json"}:
-            skipped.append(relative)
             continue
         normalized = normalize_sharded_path(root, path)
         profile = profiles.setdefault(normalized, DatasetProfile(normalized))
@@ -132,7 +130,7 @@ def profile_export(root: Path) -> tuple[list[DatasetProfile], list[str]]:
                 profile.add_record(record)
         except (OSError, UnicodeError, csv.Error, json.JSONDecodeError) as exc:
             raise ValueError(f"cannot read {relative}: {exc}") from exc
-    return sorted(profiles.values(), key=lambda item: item.path.casefold()), skipped
+    return sorted(profiles.values(), key=lambda item: item.path.casefold())
 
 
 def _display_value(value: str) -> str:
@@ -151,11 +149,18 @@ def _value_summary(column: ColumnProfile) -> str:
     )
 
 
-def write_markdown(
-    profiles: Iterable[DatasetProfile], skipped: Iterable[str], stream: TextIO
-) -> None:
+def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     """Write a Markdown exploration report to a text stream."""
     output = stream
+    profile_list = list(profiles)
+    display_paths: list[str] = []
+    for profile in profile_list:
+        normalized = Path(profile.path)
+        shard_glob = (normalized.parent / f"*{normalized.suffix}").as_posix()
+        display_paths.append(
+            shard_glob if len(profile.physical_files) > 1 else profile.path
+        )
+
     print("# Kindle export data profile", file=output)
     print(file=output)
     print(
@@ -163,16 +168,26 @@ def write_markdown(
         "JSON arrays can contribute multiple values to one record.",
         file=output,
     )
-    for profile in profiles:
+    print(file=output)
+    print("## Table of contents", file=output)
+    print(file=output)
+    for number, display_path in enumerate(display_paths, 1):
+        print(f"- [`{display_path}`](#dataset-{number})", file=output)
+
+    for number, (profile, display_path) in enumerate(
+        zip(profile_list, display_paths, strict=True), 1
+    ):
+        normalized = Path(profile.path)
+        shard_glob = (normalized.parent / f"*{normalized.suffix}").as_posix()
         print(file=output)
-        print(f"## `{profile.path}`", file=output)
+        print(f'<a id="dataset-{number}"></a>', file=output)
+        print(file=output)
+        print(f"## `{display_path}`", file=output)
         print(file=output)
         print(f"- Physical files: {len(profile.physical_files)}", file=output)
         print(f"- Records: {profile.record_count}", file=output)
         if len(profile.physical_files) > 1:
-            print("- Shards:", file=output)
-            for path in sorted(profile.physical_files):
-                print(f"  - `{path}`", file=output)
+            print(f"- Shards: `{shard_glob}`", file=output)
         print(file=output)
         print(
             "| Column | Values | Unique values | Populated records | Empty records | Key-like | Values / examples |",
@@ -198,14 +213,6 @@ def write_markdown(
                 file=output,
             )
 
-    skipped_paths = list(skipped)
-    if skipped_paths:
-        print(file=output)
-        print("## Unsupported files", file=output)
-        print(file=output)
-        for path in skipped_paths:
-            print(f"- `{path}`", file=output)
-
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -219,13 +226,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        profiles, skipped = profile_export(args.export_directory)
+        profiles = profile_export(args.export_directory)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open("w", encoding="utf-8") as stream:
-                write_markdown(profiles, skipped, stream)
+                write_markdown(profiles, stream)
         else:
-            write_markdown(profiles, skipped, sys.stdout)
+            write_markdown(profiles, sys.stdout)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
