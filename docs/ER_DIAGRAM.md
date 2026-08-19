@@ -165,7 +165,9 @@ synthetic canonical fields. Source columns are named
 `{export-relative/path/to/file}->{field_name}`; nested JSON field names retain their
 object path, such as `rights.acquiredDate`. Numbered files are rewritten as
 `{directory}/shard.{extension}` only when at least two siblings share the same base
-name and extension; singleton numbered/versioned files keep their exact paths.
+name and extension. Matching versioned dataset directories are combined under paths
+such as `CustomerRelationshipIndex.*/*.csv`. Singleton numbered/versioned files keep
+their exact paths.
 
 Acquisition-related dates remain separate because they come from three different
 entity types and do not have identical semantics:

@@ -25,7 +25,7 @@ def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path)
     first.touch()
     second.touch()
 
-    versioned = tmp_path / "dataset" / "CustomerGenres.2.1.csv"
+    versioned = tmp_path / "dataset" / "CustomerGenres.17.42.csv"
     versioned.parent.mkdir()
     versioned.touch()
 
@@ -36,8 +36,22 @@ def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path)
         "Digital.Content.Ownership/shard.json"
     )
     assert normalize_sharded_path(tmp_path, versioned) == (
-        "dataset/CustomerGenres.2.1.csv"
+        "dataset/CustomerGenres.17.42.csv"
     )
+
+    datasets = tmp_path / "datasets"
+    partition_paths = []
+    versions = (f"{major}.{minor}" for major, minor in zip(range(3), range(10, 13)))
+    for version in versions:
+        directory = datasets / f"CustomerAuthor.{version}"
+        directory.mkdir(parents=True)
+        partition = directory / f"CustomerAuthor.{version}.csv"
+        partition.touch()
+        partition_paths.append(partition)
+    for partition in partition_paths:
+        assert normalize_sharded_path(tmp_path, partition) == (
+            "datasets/CustomerAuthor.*/*.csv"
+        )
 
 
 def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path) -> None:

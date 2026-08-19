@@ -151,27 +151,54 @@ def raw_headers(books: Iterable[Book]) -> list[str]:
 
 
 _NUMBERED_SHARD = re.compile(r"^(?P<base>.+)\.(?P<number>\d+)(?P<extension>\.[^.]+)$")
+_VERSIONED_DATASET = re.compile(r"^(?P<base>.+)\.\d+\.\d+$")
+
+
+def _partitioned_dataset_path(path: Path) -> Path | None:
+    """Return a wildcard path when sibling version directories form one dataset."""
+    match = _VERSIONED_DATASET.match(path.stem)
+    if not match or path.parent.name != path.stem:
+        return None
+    base = match.group("base")
+    matching_files = []
+    for directory in path.parent.parent.iterdir():
+        directory_match = _VERSIONED_DATASET.match(directory.name)
+        if not directory.is_dir() or not directory_match:
+            continue
+        if directory_match.group("base") != base:
+            continue
+        candidate = directory / f"{directory.name}{path.suffix}"
+        if candidate.is_file():
+            matching_files.append(candidate)
+    if len(matching_files) < 2:
+        return None
+    return path.parent.parent / f"{base}.*" / f"*{path.suffix}"
 
 
 def normalize_sharded_path(root: Path, path: Path) -> str:
-    """Return an export-relative provenance path, collapsing real shard groups.
+    """Return a stable export-relative path for shards and dataset partitions.
 
-    A numbered file is considered a shard only when its directory contains another
-    file with the same base and extension but a different numeric suffix. Singleton
-    versioned files therefore retain their exact names.
+    Numbered files in one directory collapse to ``shard.<extension>``. Files whose
+    matching version appears in multiple sibling dataset directories collapse to a
+    two-level wildcard such as ``Dataset.*/*.csv``. Singleton numbered/versioned
+    files retain their exact names.
     """
-    match = _NUMBERED_SHARD.match(path.name)
-    if match:
-        pattern = f"{match.group('base')}.*{match.group('extension')}"
-        matching_siblings = (
-            sibling
-            for sibling in path.parent.glob(pattern)
-            if (sibling_match := _NUMBERED_SHARD.match(sibling.name))
-            and sibling_match.group("base") == match.group("base")
-            and sibling_match.group("extension") == match.group("extension")
-        )
-        if sum(1 for _ in matching_siblings) > 1:
-            path = path.with_name(f"shard{match.group('extension')}")
+    partitioned_path = _partitioned_dataset_path(path)
+    if partitioned_path is not None:
+        path = partitioned_path
+    else:
+        match = _NUMBERED_SHARD.match(path.name)
+        if match:
+            pattern = f"{match.group('base')}.*{match.group('extension')}"
+            matching_siblings = (
+                sibling
+                for sibling in path.parent.glob(pattern)
+                if (sibling_match := _NUMBERED_SHARD.match(sibling.name))
+                and sibling_match.group("base") == match.group("base")
+                and sibling_match.group("extension") == match.group("extension")
+            )
+            if sum(1 for _ in matching_siblings) > 1:
+                path = path.with_name(f"shard{match.group('extension')}")
     return path.relative_to(root).as_posix()
 
 

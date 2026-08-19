@@ -87,9 +87,11 @@ Digital.Content.Ownership/shard.json->rights.acquiredDate
 Kindle.UnifiedLibraryIndex/datasets/.../CustomerRelationshipIndex.1.1.csv->Our Price
 ```
 
-True numbered shard groups are normalized to `{directory}/shard.{extension}`, so
-packaging numbers do not create hundreds of sparse columns. Singleton numbered files
-retain their exact names. When several records in one normalized source provide
+True numbered shard groups are normalized to `{directory}/shard.{extension}`.
+Versioned partitions of one dataset are normalized to paths such as
+`CustomerRelationshipIndex.*/*.csv`. This prevents packaging numbers from creating
+sparse duplicate columns; singleton numbered/versioned files retain their exact
+names. When several records in one normalized source provide
 different values, the values are joined with `; `. Raw identifiers, titles, authors,
 genres, and series metadata retain their actual source paths instead of being
 relabeled as synthetic. Acquisition dates remain separate as ownership
@@ -111,7 +113,7 @@ join keys, provenance rules, and currently unconnected entities.
 
 Generate a Markdown inventory of every CSV/JSON file and column, including record
 counts, unique and empty values, low-cardinality domains, examples, and key-like
-columns. True file shards are profiled as one dataset:
+columns. True file shards and versioned dataset partitions are profiled together:
 
 ```console
 uv run python scripts/explore_export.py /path/to/Kindle -o data-profile.md
