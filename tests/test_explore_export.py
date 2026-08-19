@@ -9,7 +9,7 @@ from scripts.explore_export import profile_export, write_markdown
 
 
 def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
-    shards = tmp_path / "ownership"
+    shards = tmp_path / "Digital.Content.Ownership"
     shards.mkdir()
     for number, asin in enumerate(("A", "B"), 1):
         (shards / f"records.{number}.json").write_text(
@@ -32,7 +32,7 @@ def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
 
     profiles = profile_export(tmp_path)
     by_path = {profile.path: profile for profile in profiles}
-    shard = by_path["ownership/shard.json"]
+    shard = by_path["Digital.Content.Ownership/shard.json"]
     assert shard.record_count == 2
     assert len(shard.physical_files) == 2
     assert shard.columns["asin"].value_count == 2
@@ -48,15 +48,43 @@ def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
     write_markdown(profiles, output)
     report = output.getvalue()
     assert "## Table of contents" in report
-    assert "- [`metadata.csv`](#dataset-1)" in report
-    assert "- [`ownership/*.json`](#dataset-2)" in report
-    assert '<a id="dataset-2"></a>' in report
+    assert "### Book" in report
+    assert "### Acquisition" in report
+    assert "### Reading" in report
+    assert "### All files" in report
+    ownership_link = "- [`Digital.Content.Ownership/*.json`](#dataset-1)"
+    assert report.count(ownership_link) == 3
+    assert "- [`metadata.csv`](#dataset-2)" in report
+    assert '<a id="dataset-1"></a>' in report
     assert "ignored.txt" not in report
     assert "Unsupported files" not in report
-    assert "## `ownership/*.json`" in report
-    assert "## `ownership/shard.json`" not in report
-    assert "- Shards: `ownership/*.json`" in report
+    assert "## `Digital.Content.Ownership/*.json`" in report
+    assert "## `Digital.Content.Ownership/shard.json`" not in report
+    assert "- Shards: `Digital.Content.Ownership/*.json`" in report
     assert "records.1.json" not in report
     assert "records.2.json" not in report
     assert "| `id` | 2 | 2 | 2 | 0 | yes |" in report
     assert 'all: "book"' in report
+
+
+def test_reading_toc_includes_sessions_sync_and_completion_markers(
+    tmp_path: Path,
+) -> None:
+    paths = [
+        "Digital.Content.Whispersync/whispersync.csv",
+        "Kindle.Devices.autoMarkAsRead/Kindle.Devices.autoMarkAsRead.csv",
+        "Kindle.Devices.ReadingActionsContainers/Kindle.Devices.ReadingActionsContainers.csv",
+        "Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv",
+        "Kindle.ReadingInsights/Kindle.reading-insights-sessions_with_adjustments.csv",
+    ]
+    for relative in paths:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("ASIN,timestamp\nBOOK,2025-01-01\n", encoding="utf-8")
+
+    output = io.StringIO()
+    write_markdown(profile_export(tmp_path), output)
+    report = output.getvalue()
+    reading_toc = report.split("### Reading", 1)[1].split("### All files", 1)[0]
+    for relative in paths:
+        assert f"[`{relative}`]" in reading_toc

@@ -23,6 +23,27 @@ LOW_CARDINALITY_LIMIT = 10
 EXAMPLE_LIMIT = 5
 EXAMPLE_LENGTH_LIMIT = 160
 
+BOOK_PATH_MARKERS = (
+    "Digital.Content.Ownership/",
+    "Digital.SeriesContent.Relation.2/BookRelation.csv",
+    "Kindle.KindleDocs.DocumentMetadata/",
+    "Kindle.SagaSeriesInfra.CollectionRightsDatastore/",
+    "Kindle.UnifiedLibraryIndex.CustomerAuthorIdRelationship.",
+    "Kindle.UnifiedLibraryIndex.CustomerAuthorNameRelationship.",
+    "Kindle.UnifiedLibraryIndex.CustomerRelationshipIndex.",
+)
+ACQUISITION_PATH_MARKERS = (
+    "Digital.Content.Ownership/",
+    "Kindle.UnifiedLibraryIndex.CustomerRelationshipIndex.",
+)
+READING_PATH_MARKERS = (
+    "Digital.Content.Whispersync/",
+    "Kindle.Devices.autoMarkAsRead/",
+    "Kindle.Devices.ReadingActionsContainers/",
+    "Kindle.Devices.ReadingSession/",
+    "reading-insights-sessions_with_adjustments",
+)
+
 
 @dataclass
 class ColumnProfile:
@@ -149,6 +170,19 @@ def _value_summary(column: ColumnProfile) -> str:
     )
 
 
+def _write_toc_group(
+    title: str,
+    indexed_paths: Iterable[tuple[int, str]],
+    stream: TextIO,
+) -> None:
+    """Write one thematic group of links in the report table of contents."""
+    print(f"### {title}", file=stream)
+    print(file=stream)
+    for number, display_path in indexed_paths:
+        print(f"- [`{display_path}`](#dataset-{number})", file=stream)
+    print(file=stream)
+
+
 def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     """Write a Markdown exploration report to a text stream."""
     output = stream
@@ -171,8 +205,35 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     print(file=output)
     print("## Table of contents", file=output)
     print(file=output)
-    for number, display_path in enumerate(display_paths, 1):
-        print(f"- [`{display_path}`](#dataset-{number})", file=output)
+    indexed_paths = list(enumerate(display_paths, 1))
+    _write_toc_group(
+        "Book",
+        (
+            item
+            for item in indexed_paths
+            if any(marker in item[1] for marker in BOOK_PATH_MARKERS)
+        ),
+        output,
+    )
+    _write_toc_group(
+        "Acquisition",
+        (
+            item
+            for item in indexed_paths
+            if any(marker in item[1] for marker in ACQUISITION_PATH_MARKERS)
+        ),
+        output,
+    )
+    _write_toc_group(
+        "Reading",
+        (
+            item
+            for item in indexed_paths
+            if any(marker in item[1] for marker in READING_PATH_MARKERS)
+        ),
+        output,
+    )
+    _write_toc_group("All files", indexed_paths, output)
 
     for number, (profile, display_path) in enumerate(
         zip(profile_list, display_paths, strict=True), 1
