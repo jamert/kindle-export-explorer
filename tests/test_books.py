@@ -136,7 +136,7 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
     assert books[0].asin == "BOOK1"
     assert books[0].title == "A Book"
     assert books[0].authors.names == ["Writer, Ada"]
-    assert books[0].authors.asin == "BOOK1"
+    assert books[0].authors.asins == []
     assert books[0].genres == ["History"]
     assert books[0].series.title == "A Series"
     assert books[0].series.position == "2"
@@ -267,6 +267,16 @@ def test_sample_and_ebook_are_deduplicated_by_synthetic_key(tmp_path: Path) -> N
             ["BOTH", "Writer, Second"],
         ],
     )
+    write_csv(
+        tmp_path,
+        "uli/CustomerAuthorIdRelationship.csv",
+        ["ASIN", "Author ID"],
+        [
+            ["BOTH", "AUTHOR-1"],
+            ["BOTH", "AUTHOR-2"],
+            ["BOTH", "AUTHOR-1"],
+        ],
+    )
 
     default_books = reconstruct_books(tmp_path)
     assert [str(book.key) for book in default_books] == ["asin:ebook:BOTH"]
@@ -282,6 +292,9 @@ def test_sample_and_ebook_are_deduplicated_by_synthetic_key(tmp_path: Path) -> N
     }
     assert {tuple(book.authors.names) for book in all_books} == {
         ("Writer, Primary", "Writer, Second")
+    }
+    assert {tuple(book.authors.asins) for book in all_books} == {
+        ("AUTHOR-1", "AUTHOR-2")
     }
 
     result = CliRunner().invoke(main, ["--show-samples", str(tmp_path)])
@@ -508,7 +521,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         record = json.loads(lines[0])
         assert record["key"] == "asin:sample:SAMPLE"
         assert record["title"] == "Échantillon"
-        assert record["author"] == {"names": [], "asin": "SAMPLE"}
+        assert record["author"] == {"names": [], "asins": []}
         assert record["ownership_digital"] == "kindle_sample"
         assert record["ownership_print"] is False
         assert record["genres"] == []

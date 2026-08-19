@@ -68,10 +68,10 @@ class CanonicalKey:
 
 @dataclass(frozen=True)
 class Authors:
-    """Names attached to one book ASIN; individual author IDs cannot be joined."""
+    """Ordered author names and unpaired Amazon author-page ASINs."""
 
     names: list[str]
-    asin: str
+    asins: list[str]
 
 
 class DigitalOwnership(StrEnum):
@@ -112,7 +112,7 @@ class BookCanonical:
         result: dict[str, object] = {
             "key": str(self.key),
             "title": self.title,
-            "author": {"names": self.authors.names, "asin": self.authors.asin},
+            "author": {"names": self.authors.names, "asins": self.authors.asins},
             "ownership_digital": self.ownership_digital.value,
             "ownership_print": self.ownership_print,
         }
@@ -163,7 +163,8 @@ class BookMetadata:
     """
 
     title: str = ""
-    authors: set[str] = field(default_factory=set)
+    authors: list[str] = field(default_factory=list)
+    author_asins: list[str] = field(default_factory=list)
     genres: set[str] = field(default_factory=set)
     series_title: str = ""
     series_position: str = ""
@@ -281,13 +282,16 @@ class CanonicalizationService:
         print_owned: bool,
     ) -> BookCanonical:
         metadata = record.metadata
-        names = set(metadata.authors)
+        names = list(metadata.authors)
         if not names and metadata.sortable_author:
-            names.add(metadata.sortable_author)
+            names.append(metadata.sortable_author)
         return BookCanonical(
             key=key,
             title=metadata.sortable_title or metadata.title,
-            authors=Authors(names=sorted(names, key=str.casefold), asin=record.asin),
+            authors=Authors(
+                names=names,
+                asins=list(metadata.author_asins),
+            ),
             ownership_digital=digital,
             ownership_print=print_owned,
             series=Series(
@@ -339,7 +343,7 @@ class CanonicalizationService:
         return BookCanonical(
             key=CanonicalKey(document_id=record.document_id),
             title=record.title,
-            authors=Authors(names=names, asin=""),
+            authors=Authors(names=names, asins=[]),
             ownership_digital=ownership,
             ownership_print=False,
             series=Series(),
@@ -639,7 +643,14 @@ def reconstruct_books(
         author = clean(row.get("Author Name"))
         if author:
             for book in catalog.records_for_asin(row.get("ASIN")):
-                book.metadata.authors.add(author)
+                if author not in book.metadata.authors:
+                    book.metadata.authors.append(author)
+    for _, row in _csv_rows(root, files.named("CustomerAuthorIdRelationship")):
+        author_asin = clean(row.get("Author ID"))
+        if author_asin:
+            for book in catalog.records_for_asin(row.get("ASIN")):
+                if author_asin not in book.metadata.author_asins:
+                    book.metadata.author_asins.append(author_asin)
     for _, row in _csv_rows(root, files.named("CustomerGenres")):
         genre = clean(row.get("Genre"))
         if genre:

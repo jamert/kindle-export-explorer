@@ -73,8 +73,9 @@ represent simultaneous print and Kindle ownership under one ASIN.
   Name` only when no author-name relationships exist, then `DocumentProvider` for
   personal documents. The sortable value never replaces or supplements ordinary
   names because it may contain only the primary author and uses different formatting.
-  `Authors.asin` is the book ASIN tying the names to their source relationship;
-  individual author names cannot safely be paired with Author IDs.
+  `Authors.names` and `Authors.asins` preserve the available author names and Amazon
+  author-page ASINs as separate lists. They are deliberately unpaired because some
+  authors have no Amazon page and the source provides no name-to-ID relationship.
 - **Series:** Saga `series-product-name`, `series-ASIN`, and item position; ULI Series
   Title and Position are the fallback. The export has no explicit sortable series
   title.
