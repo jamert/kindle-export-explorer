@@ -44,6 +44,11 @@ READING_PATH_MARKERS = (
     "Kindle.Devices.ReadingSession/",
     "reading-insights-sessions_with_adjustments",
 )
+TOC_GROUPS = (
+    ("Book", BOOK_PATH_MARKERS),
+    ("Acquisition", ACQUISITION_PATH_MARKERS),
+    ("Reading", READING_PATH_MARKERS),
+)
 
 
 @dataclass
@@ -171,6 +176,13 @@ def _value_summary(column: ColumnProfile) -> str:
     )
 
 
+def _display_path(profile: DatasetProfile) -> str:
+    if len(profile.physical_files) == 1:
+        return profile.path
+    normalized = Path(profile.path)
+    return (normalized.parent / f"*{normalized.suffix}").as_posix()
+
+
 def _write_toc_group(
     title: str,
     indexed_paths: Iterable[tuple[int, str]],
@@ -188,13 +200,7 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     """Write a Markdown exploration report to a text stream."""
     output = stream
     profile_list = list(profiles)
-    display_paths: list[str] = []
-    for profile in profile_list:
-        normalized = Path(profile.path)
-        shard_glob = (normalized.parent / f"*{normalized.suffix}").as_posix()
-        display_paths.append(
-            shard_glob if len(profile.physical_files) > 1 else profile.path
-        )
+    display_paths = [_display_path(profile) for profile in profile_list]
 
     print("# Kindle export data profile", file=output)
     print(file=output)
@@ -207,40 +213,18 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     print("## Table of contents", file=output)
     print(file=output)
     indexed_paths = list(enumerate(display_paths, 1))
-    _write_toc_group(
-        "Book",
-        (
+    for title, markers in TOC_GROUPS:
+        matching_paths = (
             item
             for item in indexed_paths
-            if any(marker in item[1] for marker in BOOK_PATH_MARKERS)
-        ),
-        output,
-    )
-    _write_toc_group(
-        "Acquisition",
-        (
-            item
-            for item in indexed_paths
-            if any(marker in item[1] for marker in ACQUISITION_PATH_MARKERS)
-        ),
-        output,
-    )
-    _write_toc_group(
-        "Reading",
-        (
-            item
-            for item in indexed_paths
-            if any(marker in item[1] for marker in READING_PATH_MARKERS)
-        ),
-        output,
-    )
+            if any(marker in item[1] for marker in markers)
+        )
+        _write_toc_group(title, matching_paths, output)
     _write_toc_group("All files", indexed_paths, output)
 
     for number, (profile, display_path) in enumerate(
         zip(profile_list, display_paths, strict=True), 1
     ):
-        normalized = Path(profile.path)
-        shard_glob = (normalized.parent / f"*{normalized.suffix}").as_posix()
         print(file=output)
         print(f'<a id="dataset-{number}"></a>', file=output)
         print(file=output)
@@ -249,7 +233,7 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
         print(f"- Physical files: {len(profile.physical_files)}", file=output)
         print(f"- Records: {profile.record_count}", file=output)
         if len(profile.physical_files) > 1:
-            print(f"- Shards: `{shard_glob}`", file=output)
+            print(f"- Shards: `{display_path}`", file=output)
         print(file=output)
         print(
             "| Column | Values | Unique values | Populated records | Empty records | Key-like | Values / examples |",
