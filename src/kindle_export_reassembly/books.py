@@ -111,6 +111,8 @@ class BookCanonical:
     def as_dict(self, *, extra: bool = False) -> dict[str, object]:
         result: dict[str, object] = {
             "key": str(self.key),
+            "asin": self.key.asin,
+            "document_id": self.key.document_id,
             "title": self.title,
             "author": {"names": self.authors.names, "asins": self.authors.asins},
             "ownership_digital": self.ownership_digital.value,
@@ -133,6 +135,8 @@ class BookCanonical:
     def as_row(self, *, extra: bool = False) -> list[str]:
         row = [
             str(self.key),
+            self.asin,
+            self.document_id,
             self.title,
             _joined(self.authors.names),
             self.ownership_digital.value,
@@ -234,7 +238,15 @@ class DocumentRecord:
 AsinBookRecord = KindleBookRecord | PrintBookRecord
 
 
-HEADERS = ["key", "title", "author", "ownership_digital", "ownership_print"]
+HEADERS = [
+    "key",
+    "asin",
+    "document_id",
+    "title",
+    "author",
+    "ownership_digital",
+    "ownership_print",
+]
 EXTRA_HEADERS = [
     "series_title",
     "series_asin",

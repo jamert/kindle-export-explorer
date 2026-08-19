@@ -13,7 +13,7 @@ uv run kindle-books /path/to/Kindle > books.tsv
 The default TSV fields are:
 
 ```text
-key  title  author  ownership_digital  ownership_print
+key  asin  document_id  title  author  ownership_digital  ownership_print
 ```
 
 `ownership_digital` is one of `unknown`, `default`, `kindle_sample`, `kindle_ebook`,

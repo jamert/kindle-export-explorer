@@ -34,8 +34,10 @@ flowchart LR
 - `genres: list[str]`
 - `marketplace: str`
 
-The default CLI output contains key, title, author, digital ownership, and print
-ownership. `--extra` adds series, genres, and marketplace.
+The default CLI output contains the formatted key, its nullable ASIN and document-ID
+components, title, author, digital ownership, and print ownership. The sample flag
+remains internal to `CanonicalKey` and is represented by the formatted key rather than
+as a separate output field. `--extra` adds series, genres, and marketplace.
 
 ### Canonical key
 

@@ -344,6 +344,8 @@ def test_extra_adds_series_genres_and_marketplace(tmp_path: Path) -> None:
     assert extra.exit_code == 0
     assert plain.output.splitlines()[0].split("\t") == [
         "key",
+        "asin",
+        "document_id",
         "title",
         "author",
         "ownership_digital",
@@ -520,6 +522,8 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert len(lines) == 1
         record = json.loads(lines[0])
         assert record["key"] == "asin:sample:SAMPLE"
+        assert record["asin"] == "SAMPLE"
+        assert record["document_id"] is None
         assert record["title"] == "Échantillon"
         assert record["author"] == {"names": [], "asins": []}
         assert record["ownership_digital"] == "kindle_sample"
@@ -728,6 +732,8 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     rows = list(csv.reader(result.output.splitlines(), dialect="excel-tab"))
     assert rows[0] == [
         "key",
+        "asin",
+        "document_id",
         "title",
         "author",
         "ownership_digital",
@@ -735,6 +741,8 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     ]
     assert rows[1] == [
         "document:DOC1",
+        "",
+        "DOC1",
         "My Document",
         "",
         "personal_document",
