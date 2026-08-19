@@ -68,9 +68,9 @@ uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 
 Select one or more records with a comma-separated, case-insensitive list of synthetic
 keys, ASINs, or personal-document IDs. `--include` works with both TSV and JSON Lines output and can
-mix both identifier types. Explicit IDs override the source and sample filters, so
-requested print books and samples are returned without `--source all` or
-`--show-samples`. Default content still requires `--show-default`:
+mix both identifier types. Explicit IDs override the source, sample, and default-content
+filters, so requested print books, samples, dictionaries, user guides, and the Cloud
+Drive notice are returned without their corresponding `--show-*` options:
 
 ```console
 uv run kindle-books --include B00B7NPRY8,B008T9L6AM /path/to/Kindle

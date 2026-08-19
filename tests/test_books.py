@@ -603,14 +603,16 @@ def test_cloud_drive_notice_is_default_content_by_portable_metadata(
     }
 
     runner = CliRunner()
-    hidden = runner.invoke(main, ["--include", "NOTICE-ID", str(tmp_path)])
-    assert hidden.exit_code == 0
-    assert "Notice From Amazon Cloud Drive" not in hidden.output
-    shown = runner.invoke(
-        main, ["--show-default", "--include", "NOTICE-ID", str(tmp_path)]
+    included = runner.invoke(main, ["--include", "NOTICE-ID", str(tmp_path)])
+    assert included.exit_code == 0
+    assert "Notice From Amazon Cloud Drive" in included.output
+
+    excluded = runner.invoke(
+        main,
+        ["--include", "NOTICE-ID", "--exclude", "NOTICE-ID", str(tmp_path)],
     )
-    assert shown.exit_code == 0
-    assert "Notice From Amazon Cloud Drive" in shown.output
+    assert excluded.exit_code == 0
+    assert "Notice From Amazon Cloud Drive" not in excluded.output
 
 
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
