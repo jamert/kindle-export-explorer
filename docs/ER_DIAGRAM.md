@@ -1,118 +1,41 @@
-# Kindle export reconstruction: entity–relationship diagram
+# Kindle export reconstruction model
 
-This diagram describes the entities currently connected by the reconstruction code.
-`BOOK` is a synthesized entity; it does not exist as a single table in the Amazon
-export.
+The application uses two processing layers. Export records are first joined into an
+internal `JoinedBook`; canonical values are selected only after all relevant sources
+have been processed.
 
 ```mermaid
-erDiagram
-    BOOK {
-        string book_key PK "asin:ebook:ASIN, asin:sample:ASIN, or document:DocumentId"
-        string asin UK "nullable"
-        string document_id UK "nullable"
-        string title
-        string source "kindle or print"
-        boolean is_sample
-        boolean is_default_content
-    }
-
-    DIGITAL_OWNERSHIP {
-        string asin FK
-        string product_name
-        string resource_type
-        string catalog
-    }
-    OWNERSHIP_RIGHT {
-        string right_type
-        datetime acquired_date
-    }
-    OWNERSHIP_ORIGIN {
-        string origin_type "Purchase, Sample, KindleDictionary, etc."
-    }
-
-    LIBRARY_RELATIONSHIP {
-        string asin FK
-        string product_name
-        string resource_type
-        string ownership_type
-        string price
-        string sortable_title
-        string sortable_author
-        string series_title
-        string series_author
-        string series_position
-        string marketplace
-        datetime relationship_creation_date
-    }
-    LIBRARY_RELATIONSHIP_TYPE {
-        string asin FK
-        string ownership_type
-        string ownership_subtype
-    }
-    BOOK_AUTHOR_NAME {
-        string asin FK
-        string author_name
-    }
-    BOOK_AUTHOR_ID {
-        string asin FK
-        string author_id
-    }
-    BOOK_GENRE {
-        string asin FK
-        string genre
-    }
-    BOOK_TAG {
-        string asin FK
-        string tag_name
-        string tag_scope
-        string tag_source_group
-        string tag_source_subgroup
-        string image_url
-    }
-
-    SERIES_ITEM {
-        string item_asin FK
-        string item_product_name
-        string series_asin
-        string series_product_name
-        string item_position
-    }
-    BOOK_RELATION {
-        string asin FK
-        string product_name
-    }
-
-    PERSONAL_DOCUMENT {
-        string document_id PK
-        string title
-        string provider
-        string filename
-        string original_type
-        integer size_bytes
-        string conversion_metadata
-        datetime entry_creation_date
-    }
-
-    BOOK ||--o{ DIGITAL_OWNERSHIP : "identified by ASIN"
-    DIGITAL_OWNERSHIP ||--o{ OWNERSHIP_RIGHT : has
-    OWNERSHIP_RIGHT ||--o| OWNERSHIP_ORIGIN : has
-
-    BOOK ||--o{ LIBRARY_RELATIONSHIP : "identified by ASIN"
-    BOOK ||--o{ LIBRARY_RELATIONSHIP_TYPE : "identified by ASIN"
-    BOOK ||--o{ BOOK_AUTHOR_NAME : "identified by ASIN"
-    BOOK ||--o{ BOOK_AUTHOR_ID : "identified by ASIN"
-    BOOK ||--o{ BOOK_GENRE : "identified by ASIN"
-    BOOK ||--o{ BOOK_TAG : "identified by ASIN"
-
-    BOOK ||--o{ SERIES_ITEM : "item-ASIN"
-    BOOK ||--o{ BOOK_RELATION : "ASIN"
-
-    BOOK o|--o| PERSONAL_DOCUMENT : "document_id"
+flowchart LR
+    O[Digital ownership] --> J[JoinedBook]
+    U[Unified Library Index] --> J
+    D[Personal-document metadata] --> J
+    S[Saga series metadata] --> J
+    A[Author and genre relations] --> J
+    J --> C[BookCanonical]
+    C --> F[CLI filtering]
+    F --> T[TSV or JSONL]
 ```
 
-## Identity and joins
+## Canonical schema
 
-The synthesized `BOOK.book_key` is one of:
+`BookCanonical` contains:
+
+- `key: CanonicalKey`
+- `title: str`
+- `authors: Authors`
+- `ownership_digital: DigitalOwnership`
+- `ownership_print: bool`
+- `series: Series`
+- `genres: list[str]`
+- `marketplace: str`
+
+The default CLI output contains key, title, author, digital ownership, and print
+ownership. `--extra` adds series, genres, and marketplace.
+
+### Canonical key
+
+`CanonicalKey` retains the source ASIN/sample distinction or a personal-document ID.
+Its string representation is:
 
 ```text
 asin:ebook:<ASIN>
@@ -120,101 +43,64 @@ asin:sample:<ASIN>
 document:<DocumentId>
 ```
 
-A sample and purchased ebook may share an ASIN, but they are distinct records and
-are deduplicated by this synthetic key. Personal-document ASIN remains empty; its
-Amazon `DocumentId` is preserved separately.
+### Ownership
 
-Almost every source joins through ASIN. The exceptions are:
+`DigitalOwnership` has these values:
 
-- Personal documents are identified by `DocumentId` when they have no ASIN.
-- Saga series rows use `item-ASIN`; `urn:collection:1:asin-…` values are normalized.
+- `unknown`: no digital-ownership evidence; normally a print-only ULI record
+- `default`: content supplied by Amazon, including dictionaries, user guides, and the
+  Cloud Drive notice
+- `kindle_sample`
+- `kindle_ebook`
+- `personal_document`
 
-No joins use title, author name, author ID, order ID, or filename.
+`ownership_print` is true only when an owned Unified Library Index item has no digital
+ownership evidence. ULI also repeats many Kindle purchases, so its presence cannot by
+itself prove ownership of a separate physical edition. The export cannot reliably
+represent simultaneous print and Kindle ownership under one ASIN.
 
-## Canonical field authority
+## Canonical precedence
 
-When several datasets repeat a field, the normal columns use these authoritative
-sources. Raw mode instead exposes the original values under their source paths:
+- **Title:** ULI `Sortable Title`, then the selected ordinary title. Ordinary-title
+  precedence remains ULI Product Name, Saga item product name, BookRelation Product
+  Name, Digital Ownership Product Name, or personal-document Title as applicable.
+- **Authors:** all `Author Name` relation values, falling back to ULI `Sortable Author
+  Name` only when no author-name relationships exist, then `DocumentProvider` for
+  personal documents. The sortable value never replaces or supplements ordinary
+  names because it may contain only the primary author and uses different formatting.
+  `Authors.asin` is the book ASIN tying the names to their source relationship;
+  individual author names cannot safely be paired with Author IDs.
+- **Series:** Saga `series-product-name`, `series-ASIN`, and item position; ULI Series
+  Title and Position are the fallback. The export has no explicit sortable series
+  title.
+- **Genres:** distinct CustomerGenres values.
+- **Marketplace:** ULI Marketplace. Conflicts produce a warning on stderr. An
+  `amazon.com` domain wins; otherwise the first value by sorted domain wins.
 
-| Canonical field | Authority / precedence |
-|---|---|
-| `key` | Synthetic content-variant key used for deduplication |
-| `asin` | The normalized source ASIN; shared by sample and ebook variants |
-| `document_id` | `Kindle.KindleDocs.DocumentMetadata.DocumentId` |
-| `title` | Unified Library Index relationship, then Saga series item, BookRelation, then Digital Ownership; personal documents use DocumentMetadata |
-| `authors` | Union of `CustomerAuthorNameRelationship.Author Name` values |
-| `genres` | Union of `CustomerGenres.Genre` values |
-| `series_title` | Saga `series-product-name`, falling back to the ULI relationship `Series Title` |
-| `series_position` | Saga `item-position-in-series`, falling back to ULI `Position In Collection` |
-| `source` | Kindle-specific provenance wins; an owned ULI item without Kindle provenance is `print` |
-| `is_sample` | True only for the `asin:sample:` content variant |
+## Source joins
 
-For repeated technical metadata, `CustomerRelationshipTypes` is authoritative for
-`Ownership Type` because it is the dedicated ownership-type relation; only owner and
-sample-owner rows are retained. Its `Ownership Subtype` is retained alongside it.
-The duplicate `CustomerRelationshipIndex.Ownership Type` field is omitted.
+Books and samples join by ASIN and are deduplicated by canonical content-variant key.
+Personal documents join by `DocumentId`. Saga item identifiers with the
+`urn:collection:1:asin-` prefix are normalized before joining.
 
-Distinct fields are not collapsed merely because their names are similar. For
-example, ULI `Resource Type` (`ITEM`) and Digital Ownership `resourceType`
-(`KindleEBook`, `KindleEBookSample`, etc.) describe different layers and both remain.
-Likewise, `series-ASIN` identifies the series, not the book.
+No joins use title, author name, author ID, order ID, filename, or fuzzy matching.
+Author-ID rows are retained in the joined source data but do not identify a particular
+name when a book has multiple authors.
 
-In `--raw` mode, every field carries explicit provenance. Only the computed `key`,
-`source`, and `is_sample` columns are named `synthetic->{field_name}`. Identifiers, titles,
-authors, genres, and series data are emitted from the source records rather than as
-synthetic canonical fields. Source columns are named
-`{export-relative/path/to/file}->{field_name}`; nested JSON field names retain their
-object path, such as `rights.acquiredDate`. Numbered files are rewritten as
-`{directory}/shard.{extension}` only when at least two siblings share the same base
-name and extension. Matching versioned dataset directories are combined under paths
-such as `CustomerRelationshipIndex.*/*.csv`. Singleton numbered/versioned files keep
-their exact paths.
+## Classification evidence
 
-Acquisition-related dates remain separate because they come from three different
-entity types and do not have identical semantics:
+- Digital Content Ownership proves Kindle digital ownership.
+- A ULI `Sample Owner` relation proves sample ownership.
+- Personal-document metadata proves personal-document ownership.
+- ULI `Item Owner` without digital evidence produces `unknown` digital ownership and
+  true print ownership.
+- Ownership origins `KindleDictionary` and `KindleUserGuide` identify defaults.
+- The Cloud Drive notice is identified by provider and filename rather than its
+  account-specific document ID.
 
-- `Digital.Content.Ownership/shard.json->rights.acquiredDate` for Kindle ownership
-  rights
-- the applicable `CustomerRelationshipIndex` CSV path followed by
-  `->Relationship Creation Date` for ULI ownership relations
-- the `DocumentMetadata` CSV path followed by `->EntryCreationDate` for personal
-  documents
+## Deliberately separate activity
 
-## Classification derived from provenance
-
-- A resource present in `DIGITAL_OWNERSHIP`, or another Kindle-specific source, is
-  classified as `source=kindle`.
-- An owned ULI item with no Kindle provenance is classified as `source=print`.
-- `resourceType=KindleEBookSample`, `ownershipType=Sample Owner`, or
-  `originType=Sample` marks a sample.
-- `originType=KindleDictionary` or `KindleUserGuide` marks default Kindle content.
-- A personal document with `DocumentProvider=Amazon Cloud Drive` and filename
-  `Notice From Amazon Cloud Drive.docx` is default content. The portable metadata
-  signature is used instead of its account-specific `DocumentId`.
-
-## Available but not connected
-
-`CustomerOrders` is deliberately not part of the reconstructed book entity. It can
-join to a book by ASIN, while `Order ID` groups transaction lines, but order type,
-quantity, and order identity describe a purchase transaction rather than the book.
-There is no other table in this Kindle export that can be joined through Order ID.
-
-Likewise, Author ID is retained as book metadata, but this export has no author entity
-table to enrich through that ID. It currently appears only in the book-to-author-ID
-relationship files.
-
-## Intentionally ignored activity entities
-
-The following activity and operational tables are not entities in the diagram, are
-not used for book reconstruction, and are not exposed by `--raw`:
-
-- `Kindle.UserUniqueTitlesCompleted.csv` (completed-title activity)
-- `Kindle.reading-insights-sessions_with_adjustments.csv` (reading sessions)
-- `whispersync.csv` (bookmark, annotation, and synchronization state)
-- `Kindle.KindleContentUpdate.ContentUpdates.csv` (automatic content updates)
-- `Kindle.KindleContentUpdate.ManualContentUpdates.csv` (manual update requests)
-- `Kindle.KindleContentUpdate.AnnotationUpdates.csv` (annotation update operations)
-
-In particular, `personal_document_id` from the activity tables is not used as a join.
-Personal documents come directly from `Kindle.KindleDocs.DocumentMetadata.csv` and
-are identified by its `DocumentId`.
+Reading sessions, Reading Insights, Whispersync annotations/state, completion events,
+content updates, and device activity are not joined into `BookCanonical`. They are
+event or device entities referencing logical content, not intrinsic book metadata.
+CustomerOrders is likewise a transaction entity and is not joined.

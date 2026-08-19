@@ -5,10 +5,12 @@ from __future__ import annotations
 import csv
 import json
 import re
+import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from enum import StrEnum
 from pathlib import Path
-from typing import Iterator, TypedDict
+from typing import Iterator
 
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
@@ -52,21 +54,108 @@ def _joined(values: Iterable[str]) -> str:
     return "; ".join(sorted(values, key=str.casefold))
 
 
-class BookRecord(TypedDict):
-    key: str
+@dataclass(frozen=True)
+class CanonicalKey:
+    asin: str | None = None
+    sample: bool | None = None
+    document_id: str | None = None
+
+    def __str__(self) -> str:
+        if self.document_id is not None:
+            return f"document:{self.document_id}"
+        kind = _SAMPLE_KIND if self.sample else _EBOOK_KIND
+        return f"asin:{kind}:{self.asin or ''}"
+
+
+@dataclass(frozen=True)
+class Authors:
+    """Names attached to one book ASIN; individual author IDs cannot be joined."""
+
+    names: list[str]
     asin: str
-    document_id: str
+
+
+class DigitalOwnership(StrEnum):
+    UNKNOWN = "unknown"
+    DEFAULT = "default"
+    KINDLE_SAMPLE = "kindle_sample"
+    KINDLE_EBOOK = "kindle_ebook"
+    PERSONAL_DOCUMENT = "personal_document"
+
+
+@dataclass(frozen=True)
+class Series:
+    title: str = ""
+    asin: str = ""
+    position: str = ""
+
+
+@dataclass(frozen=True)
+class BookCanonical:
+    key: CanonicalKey
     title: str
-    authors: list[str]
+    authors: Authors
+    ownership_digital: DigitalOwnership
+    ownership_print: bool
+    series: Series
     genres: list[str]
-    series_title: str
-    series_position: str
-    source: str
-    is_sample: bool
+    marketplace: str
+
+    @property
+    def asin(self) -> str:
+        return self.key.asin or ""
+
+    @property
+    def document_id(self) -> str:
+        return self.key.document_id or ""
+
+    def as_dict(self, *, extra: bool = False) -> dict[str, object]:
+        result: dict[str, object] = {
+            "key": str(self.key),
+            "title": self.title,
+            "author": {"names": self.authors.names, "asin": self.authors.asin},
+            "ownership_digital": self.ownership_digital.value,
+            "ownership_print": self.ownership_print,
+        }
+        if extra:
+            result.update(
+                {
+                    "series": {
+                        "title": self.series.title,
+                        "asin": self.series.asin,
+                        "position": self.series.position,
+                    },
+                    "genres": self.genres,
+                    "marketplace": self.marketplace,
+                }
+            )
+        return result
+
+    def as_row(self, *, extra: bool = False) -> list[str]:
+        row = [
+            str(self.key),
+            self.title,
+            _joined(self.authors.names),
+            self.ownership_digital.value,
+            "true" if self.ownership_print else "false",
+        ]
+        if extra:
+            row.extend(
+                (
+                    self.series.title,
+                    self.series.asin,
+                    self.series.position,
+                    _joined(self.genres),
+                    self.marketplace,
+                )
+            )
+        return row
 
 
 @dataclass
-class Book:
+class JoinedBook:
+    """Source-layer record assembled before canonical values are selected."""
+
     asin: str = ""
     document_id: str = ""
     content_kind: str = "ebook"
@@ -75,7 +164,13 @@ class Book:
     genres: set[str] = field(default_factory=set)
     series_title: str = ""
     series_position: str = ""
-    source: str = "kindle"
+    series_asin: str = ""
+    sortable_title: str = ""
+    sortable_author: str = ""
+    document_provider: str = ""
+    marketplaces: set[str] = field(default_factory=set)
+    has_digital_ownership: bool = False
+    has_library_ownership: bool = False
     is_sample: bool = False
     is_default_content: bool = field(default=False, repr=False)
     raw_fields: dict[str, set[str]] = field(default_factory=dict, repr=False)
@@ -94,11 +189,18 @@ class Book:
             self.title = title
             self._title_rank = rank
 
-    def set_series(self, title: object, position: object, rank: int) -> None:
+    def set_series(
+        self,
+        title: object,
+        position: object,
+        rank: int,
+        asin: object = "",
+    ) -> None:
         series_title = clean(title)
         if series_title and rank >= self._series_rank:
             self.series_title = series_title
             self.series_position = clean(position)
+            self.series_asin = clean(asin)
             self._series_rank = rank
 
     def add_raw(
@@ -114,85 +216,96 @@ class Book:
             if value:
                 self.raw_fields.setdefault(f"{source_path}->{name}", set()).add(value)
 
-    def as_dict(self) -> BookRecord:
-        return {
-            "key": self.key,
-            "asin": self.asin,
-            "document_id": self.document_id,
-            "title": self.title,
-            "authors": sorted(self.authors, key=str.casefold),
-            "genres": sorted(self.genres, key=str.casefold),
-            "series_title": self.series_title,
-            "series_position": self.series_position,
-            "source": self.source,
-            "is_sample": self.is_sample,
-        }
-
-    def as_raw_dict(self, raw_headers: Iterable[str]) -> dict[str, object]:
-        result: dict[str, object] = {
-            "synthetic->key": self.key,
-            "synthetic->source": self.source,
-            "synthetic->is_sample": self.is_sample,
-        }
-        result.update(
-            {
-                header: _joined(self.raw_fields.get(header, ()))
-                for header in raw_headers
-            }
+    def to_canonical(self) -> BookCanonical:
+        marketplace = _select_marketplace(self.key, self.marketplaces)
+        if self.is_default_content:
+            digital = DigitalOwnership.DEFAULT
+        elif self.document_id:
+            digital = DigitalOwnership.PERSONAL_DOCUMENT
+        elif self.is_sample:
+            digital = DigitalOwnership.KINDLE_SAMPLE
+        elif self.has_digital_ownership:
+            digital = DigitalOwnership.KINDLE_EBOOK
+        else:
+            digital = DigitalOwnership.UNKNOWN
+        author_names = set(self.authors)
+        if not author_names and self.sortable_author:
+            author_names.add(self.sortable_author)
+        if not author_names and self.document_provider:
+            author_names.add(self.document_provider)
+        names = sorted(author_names, key=str.casefold)
+        return BookCanonical(
+            key=CanonicalKey(
+                asin=self.asin or None,
+                sample=self.is_sample if self.asin else None,
+                document_id=self.document_id or None,
+            ),
+            title=self.sortable_title or self.title,
+            authors=Authors(names=names, asin=self.asin),
+            ownership_digital=digital,
+            ownership_print=(
+                self.has_library_ownership and not self.has_digital_ownership
+            ),
+            series=Series(
+                title=self.series_title,
+                asin=self.series_asin,
+                position=self.series_position,
+            ),
+            genres=sorted(self.genres, key=str.casefold),
+            marketplace=marketplace,
         )
-        return result
-
-    def as_row(self) -> list[str]:
-        record = self.as_dict()
-        return [
-            record["key"],
-            record["asin"],
-            record["document_id"],
-            record["title"],
-            _joined(record["authors"]),
-            _joined(record["genres"]),
-            record["series_title"],
-            record["series_position"],
-            record["source"],
-            "true" if record["is_sample"] else "false",
-        ]
-
-    def as_raw_row(self, raw_headers: Iterable[str]) -> list[str]:
-        return [
-            self.key,
-            self.source,
-            "true" if self.is_sample else "false",
-            *(_joined(self.raw_fields.get(header, ())) for header in raw_headers),
-        ]
 
 
-HEADERS = [
-    "key",
-    "asin",
-    "document_id",
-    "title",
-    "authors",
-    "genres",
+HEADERS = ["key", "title", "author", "ownership_digital", "ownership_print"]
+EXTRA_HEADERS = [
     "series_title",
+    "series_asin",
     "series_position",
-    "source",
-    "is_sample",
+    "genres",
+    "marketplace",
 ]
+
+
+def _marketplace_domain(value: str) -> str:
+    without_scheme = (
+        value.casefold().removeprefix("https://").removeprefix("http://")
+    )
+    return without_scheme.split("/", 1)[0]
+
+
+def _select_marketplace(key: str, values: set[str]) -> str:
+    if not values:
+        return ""
+    ordered = sorted(
+        values,
+        key=lambda value: (_marketplace_domain(value), value.casefold()),
+    )
+    preferred = next(
+        (value for value in ordered if _marketplace_domain(value).endswith("amazon.com")),
+        ordered[0],
+    )
+    if len(values) > 1:
+        alternatives = ", ".join(ordered)
+        print(
+            f"warning: {key} has multiple marketplaces ({alternatives}); using {preferred}",
+            file=sys.stderr,
+        )
+    return preferred
 
 
 class BookCatalog:
     """Deduplicate books by key and index their content variants by ASIN."""
 
     def __init__(self) -> None:
-        self._by_key: dict[str, Book] = {}
-        self._by_asin: dict[str, list[Book]] = {}
+        self._by_key: dict[str, JoinedBook] = {}
+        self._by_asin: dict[str, list[JoinedBook]] = {}
 
     def get_or_create(
         self,
         asin: object = "",
         document_id: object = "",
         content_kind: str = _EBOOK_KIND,
-    ) -> tuple[Book | None, bool]:
+    ) -> tuple[JoinedBook | None, bool]:
         asin_value = _clean_identifier(asin)
         document_value = _clean_identifier(document_id)
         if not asin_value and not document_value:
@@ -205,35 +318,30 @@ class BookCatalog:
         existing = self._by_key.get(key)
         if existing is not None:
             return existing, False
-        book = Book(
+        book = JoinedBook(
             asin=asin_value,
             document_id=document_value,
             content_kind=content_kind,
             is_sample=content_kind == _SAMPLE_KIND,
         )
         self._by_key[key] = book
-        # Preserve the existing empty-ASIN bucket used by personal documents.
-        self._by_asin.setdefault(asin_value, []).append(book)
+        if asin_value:
+            self._by_asin.setdefault(asin_value, []).append(book)
         return book, True
 
-    def variants(self, asin: object) -> list[Book]:
+    def variants(self, asin: object) -> list[JoinedBook]:
         return self._by_asin.get(clean(asin), [])
 
-    def variant(self, asin: object, content_kind: str) -> Book | None:
+    def variant(self, asin: object, content_kind: str) -> JoinedBook | None:
         return self._by_key.get(f"asin:{content_kind}:{clean(asin)}")
 
-    def values(self) -> Iterable[Book]:
+    def values(self) -> Iterable[JoinedBook]:
         return self._by_key.values()
 
 
 def _clean_identifier(value: object) -> str:
     result = clean(value)
     return "" if result.casefold() == "invalid-asin" else result
-
-
-def raw_headers(books: Iterable[Book]) -> list[str]:
-    """Return the sorted union of raw fields present on the selected books."""
-    return sorted({name for book in books for name in book.raw_fields}, key=str.casefold)
 
 
 _NUMBERED_SHARD = re.compile(r"^(?P<base>.+)\.(?P<number>\d+)(?P<extension>\.[^.]+)$")
@@ -322,8 +430,8 @@ def reconstruct_books(
     show_default: bool = False,
     show_samples: bool = False,
     source: str = "kindle",
-) -> list[Book]:
-    """Return deduplicated, intrinsic book metadata found under *root*.
+) -> list[BookCanonical]:
+    """Join source records and return canonical books found under *root*.
 
     ``source`` selects Kindle content, print books, or ``all``. Samples are omitted
     unless ``show_samples`` is true. Kindle-supplied dictionaries and user guides
@@ -366,7 +474,7 @@ def reconstruct_books(
         )
         if book:
             source_path = normalize_sharded_path(root, path)
-            book.source = "kindle"
+            book.has_digital_ownership = True
             book.set_title(resource.get("Product Name"), 30)
             book.add_raw(
                 source_path,
@@ -409,12 +517,13 @@ def reconstruct_books(
         content_kind = (
             _SAMPLE_KIND if ownership_type == "sample owner" else _EBOOK_KIND
         )
-        book, created = catalog.get_or_create(asin, content_kind=content_kind)
+        book, _ = catalog.get_or_create(asin, content_kind=content_kind)
         if book:
             # ULI includes physical Amazon purchases. Kindle ownership evidence
             # takes precedence; an item found only in ULI is a print book.
-            if created:
-                book.source = "print"
+            book.has_library_ownership = True
+            if content_kind == _SAMPLE_KIND:
+                book.has_digital_ownership = True
             book.add_raw(
                 source_path,
                 row,
@@ -434,7 +543,20 @@ def reconstruct_books(
                 ),
             )
             book.set_title(row.get("Product Name"), 50)
-            book.set_series(row.get("Series Title"), row.get("Position In Collection"), 10)
+            sortable_title = clean(row.get("Sortable Title"))
+            if sortable_title:
+                book.sortable_title = sortable_title
+            sortable_author = clean(row.get("Sortable Author Name"))
+            if sortable_author:
+                book.sortable_author = sortable_author
+            marketplace = clean(row.get("Marketplace"))
+            if marketplace:
+                book.marketplaces.add(marketplace)
+            book.set_series(
+                row.get("Series Title"),
+                row.get("Position In Collection"),
+                10,
+            )
 
     # BookRelation contains intrinsic item-to-series catalog relations. Its
     # acquisition timestamp is deliberately ignored.
@@ -447,7 +569,6 @@ def reconstruct_books(
         book, _ = catalog.get_or_create(row.get("ASIN"))
         if book:
             for variant in catalog.variants(row.get("ASIN")):
-                variant.source = "kindle"
                 variant.add_raw(source_path, row, ("ASIN", "Product Name"))
                 variant.set_title(row.get("Product Name"), 35)
 
@@ -458,8 +579,9 @@ def reconstruct_books(
     for source_path, row in _csv_rows(root, document_paths):
         book, _ = catalog.get_or_create(document_id=row.get("DocumentId"))
         if book:
-            book.source = "kindle"
+            book.has_digital_ownership = True
             book.is_default_content = is_default_personal_document(row)
+            book.document_provider = clean(row.get("DocumentProvider"))
             book.add_raw(
                 source_path,
                 row,
@@ -481,7 +603,6 @@ def reconstruct_books(
         book, _ = catalog.get_or_create(item_asin)
         if book:
             for variant in catalog.variants(item_asin):
-                variant.source = "kindle"
                 variant.add_raw(
                     source_path,
                     row,
@@ -499,6 +620,7 @@ def reconstruct_books(
                     row.get("series-product-name"),
                     row.get("item-position-in-series"),
                     50,
+                    row.get("series-ASIN"),
                 )
 
     # Enrich established books from metadata-only ULI relations. These files do
@@ -552,11 +674,20 @@ def reconstruct_books(
     if not recognized:
         raise ExportError(f"no recognized Kindle export files found in {root}")
 
-    result = catalog.values()
+    joined_books = catalog.values()
     if not show_default:
-        result = (book for book in result if not book.is_default_content)
+        joined_books = (book for book in joined_books if not book.is_default_content)
     if not show_samples:
-        result = (book for book in result if not book.is_sample)
-    if source != "all":
-        result = (book for book in result if book.source == source)
-    return sorted(result, key=lambda book: (book.title.casefold(), book.key))
+        joined_books = (book for book in joined_books if not book.is_sample)
+    if source == "kindle":
+        joined_books = (
+            book for book in joined_books if book.has_digital_ownership
+        )
+    elif source == "print":
+        joined_books = (
+            book
+            for book in joined_books
+            if book.has_library_ownership and not book.has_digital_ownership
+        )
+    result = [book.to_canonical() for book in joined_books]
+    return sorted(result, key=lambda book: (book.title.casefold(), str(book.key)))
