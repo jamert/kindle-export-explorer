@@ -84,7 +84,7 @@ class DigitalOwnership(StrEnum):
 
 @dataclass(frozen=True)
 class Series:
-    title: str | None
+    title: str
     asin: str | None
     position: str | None
 
@@ -149,7 +149,7 @@ class BookCanonical:
         if extra:
             row.extend(
                 (
-                    (self.series.title or "") if self.series else "",
+                    self.series.title if self.series else "",
                     (self.series.asin or "") if self.series else "",
                     (self.series.position or "") if self.series else "",
                     _joined(self.genres),
@@ -301,20 +301,15 @@ class CanonicalizationService:
         names = list(metadata.authors)
         if not names and metadata.sortable_author:
             names.append(metadata.sortable_author)
-        series = None
-        if any(
-            value is not None
-            for value in (
-                metadata.series_title,
-                metadata.series_asin,
-                metadata.series_position,
-            )
-        ):
-            series = Series(
+        series = (
+            Series(
                 title=metadata.series_title,
                 asin=metadata.series_asin,
                 position=metadata.series_position,
             )
+            if metadata.series_title is not None
+            else None
+        )
         return BookCanonical(
             key=key,
             title=metadata.sortable_title or metadata.title,

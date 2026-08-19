@@ -30,7 +30,8 @@ flowchart LR
 - `authors: Authors`
 - `ownership_digital: DigitalOwnership`
 - `ownership_print: bool`
-- `series: Series | None`
+- `series: Series | None`, where a present series has a required title and nullable
+  ASIN and position
 - `genres: list[str]`
 - `marketplace: str`
 
