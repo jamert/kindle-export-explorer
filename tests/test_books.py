@@ -575,6 +575,44 @@ def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     assert "provide at least one key, ASIN, or document ID" in empty_result.output
 
 
+def test_cloud_drive_notice_is_default_content_by_portable_metadata(
+    tmp_path: Path,
+) -> None:
+    write_csv(
+        tmp_path,
+        "Kindle.KindleDocs.DocumentMetadata.csv",
+        ["DocumentId", "Title", "DocumentProvider", "Filename"],
+        [
+            [
+                "NOTICE-ID",
+                "Notice From Amazon Cloud Drive",
+                "Amazon Cloud Drive",
+                "Notice From Amazon Cloud Drive.docx",
+            ],
+            ["USER-ID", "My Document", "Amazon Cloud Drive", "my-document.docx"],
+        ],
+    )
+
+    default_books = reconstruct_books(tmp_path)
+    assert [book.key for book in default_books] == ["document:USER-ID"]
+
+    shown_books = reconstruct_books(tmp_path, show_default=True)
+    assert {book.key for book in shown_books} == {
+        "document:NOTICE-ID",
+        "document:USER-ID",
+    }
+
+    runner = CliRunner()
+    hidden = runner.invoke(main, ["--include", "NOTICE-ID", str(tmp_path)])
+    assert hidden.exit_code == 0
+    assert "Notice From Amazon Cloud Drive" not in hidden.output
+    shown = runner.invoke(
+        main, ["--show-default", "--include", "NOTICE-ID", str(tmp_path)]
+    )
+    assert shown.exit_code == 0
+    assert "Notice From Amazon Cloud Drive" in shown.output
+
+
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     write_csv(
         tmp_path,

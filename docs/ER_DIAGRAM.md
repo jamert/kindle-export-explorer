@@ -188,6 +188,9 @@ entity types and do not have identical semantics:
 - `resourceType=KindleEBookSample`, `ownershipType=Sample Owner`, or
   `originType=Sample` marks a sample.
 - `originType=KindleDictionary` or `KindleUserGuide` marks default Kindle content.
+- A personal document with `DocumentProvider=Amazon Cloud Drive` and filename
+  `Notice From Amazon Cloud Drive.docx` is default content. The portable metadata
+  signature is used instead of its account-specific `DocumentId`.
 
 ## Available but not connected
 

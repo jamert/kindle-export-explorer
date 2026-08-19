@@ -24,8 +24,11 @@ Source detection uses Kindle ownership records rather than the shape of the ASIN
 print books with a `B`-prefixed ASIN are still classified as print. The TSV includes a
 `source` column containing `kindle` or `print`.
 
-Book samples, Kindle-supplied dictionaries, and Kindle user guides are also excluded
-by default. Include either group with `--show-samples` or `--show-default`:
+Book samples, Kindle-supplied dictionaries, Kindle user guides, and Amazon's
+`Notice From Amazon Cloud Drive.docx` personal document are excluded by default.
+Include either group with `--show-samples` or `--show-default`. The Cloud Drive notice
+is recognized from its provider and filename rather than its account-specific
+document ID:
 
 ```console
 uv run kindle-books --show-samples /path/to/Kindle > books-with-samples.tsv
@@ -65,9 +68,9 @@ uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 
 Select one or more records with a comma-separated, case-insensitive list of synthetic
 keys, ASINs, or personal-document IDs. `--include` works with both TSV and JSON Lines output and can
-mix both identifier types. Explicit IDs override the source, sample, and default-
-content filters, so requested print books, samples, dictionaries, and user guides are
-returned without their corresponding `--source` or `--show-*` options:
+mix both identifier types. Explicit IDs override the source and sample filters, so
+requested print books and samples are returned without `--source all` or
+`--show-samples`. Default content still requires `--show-default`:
 
 ```console
 uv run kindle-books --include B00B7NPRY8,B008T9L6AM /path/to/Kindle

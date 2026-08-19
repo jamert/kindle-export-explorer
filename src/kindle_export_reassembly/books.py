@@ -32,6 +32,16 @@ def clean_item_asin(value: object) -> str:
     return result
 
 
+def is_default_personal_document(values: Mapping[str, object]) -> bool:
+    """Identify Amazon's Cloud Drive notice without relying on an account ID."""
+    provider = clean(values.get("DocumentProvider")).casefold()
+    filename = Path(clean(values.get("Filename"))).name.casefold()
+    return (
+        provider == "amazon cloud drive"
+        and filename == "notice from amazon cloud drive.docx"
+    )
+
+
 @dataclass
 class Book:
     asin: str = ""
@@ -410,6 +420,7 @@ def reconstruct_books(
         book = get(document_id=row.get("DocumentId"))
         if book:
             book.source = "kindle"
+            book.is_default_content = is_default_personal_document(row)
             book.add_raw(
                 source_path,
                 row,

@@ -78,7 +78,7 @@ def main(
             export_directory,
             # Explicit IDs override all category filters. Exclusion is still
             # applied below and therefore always wins.
-            show_default=True if requested_ids is not None else show_default,
+            show_default=show_default,
             show_samples=True if requested_ids is not None else show_samples,
             source="all" if requested_ids is not None else source,
         )
