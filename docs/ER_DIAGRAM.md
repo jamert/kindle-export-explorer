@@ -7,7 +7,7 @@ export.
 ```mermaid
 erDiagram
     BOOK {
-        string book_key PK "ASIN, else document:DocumentId"
+        string book_key PK "asin:ebook:ASIN, asin:sample:ASIN, or document:DocumentId"
         string asin UK "nullable"
         string document_id UK "nullable"
         string title
@@ -112,17 +112,17 @@ erDiagram
 
 ## Identity and joins
 
-The synthesized `BOOK.book_key` is:
+The synthesized `BOOK.book_key` is one of:
 
 ```text
-ASIN
-```
-
-or, for a personal document without an ASIN:
-
-```text
+asin:ebook:<ASIN>
+asin:sample:<ASIN>
 document:<DocumentId>
 ```
+
+A sample and purchased ebook may share an ASIN, but they are distinct records and
+are deduplicated by this synthetic key. Personal-document ASIN remains empty; its
+Amazon `DocumentId` is preserved separately.
 
 Almost every source joins through ASIN. The exceptions are:
 
@@ -138,7 +138,8 @@ sources. Raw mode instead exposes the original values under their source paths:
 
 | Canonical field | Authority / precedence |
 |---|---|
-| `asin` | The normalized ASIN used as the book key |
+| `key` | Synthetic content-variant key used for deduplication |
+| `asin` | The normalized source ASIN; shared by sample and ebook variants |
 | `document_id` | `Kindle.KindleDocs.DocumentMetadata.DocumentId` |
 | `title` | Unified Library Index relationship, then Saga series item, BookRelation, then Digital Ownership; personal documents use DocumentMetadata |
 | `authors` | Union of `CustomerAuthorNameRelationship.Author Name` values |
@@ -146,7 +147,7 @@ sources. Raw mode instead exposes the original values under their source paths:
 | `series_title` | Saga `series-product-name`, falling back to the ULI relationship `Series Title` |
 | `series_position` | Saga `item-position-in-series`, falling back to ULI `Position In Collection` |
 | `source` | Kindle-specific provenance wins; an owned ULI item without Kindle provenance is `print` |
-| `is_sample` | True when any ownership resource, origin, or ULI ownership record marks it as a sample |
+| `is_sample` | True only for the `asin:sample:` content variant |
 
 For repeated technical metadata, `CustomerRelationshipTypes` is authoritative for
 `Ownership Type` because it is the dedicated ownership-type relation; only owner and
@@ -158,8 +159,8 @@ example, ULI `Resource Type` (`ITEM`) and Digital Ownership `resourceType`
 (`KindleEBook`, `KindleEBookSample`, etc.) describe different layers and both remain.
 Likewise, `series-ASIN` identifies the series, not the book.
 
-In `--raw` mode, every field carries explicit provenance. Only the computed `source`
-and `is_sample` columns are named `synthetic->{field_name}`. Identifiers, titles,
+In `--raw` mode, every field carries explicit provenance. Only the computed `key`,
+`source`, and `is_sample` columns are named `synthetic->{field_name}`. Identifiers, titles,
 authors, genres, and series data are emitted from the source records rather than as
 synthetic canonical fields. Source columns are named
 `{export-relative/path/to/file}->{field_name}`; nested JSON field names retain their

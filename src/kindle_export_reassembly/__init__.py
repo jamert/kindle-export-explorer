@@ -41,12 +41,12 @@ from .books import ExportError, HEADERS, raw_headers, reconstruct_books
 @click.option(
     "--include",
     metavar="ID[,ID...]",
-    help="Only emit records matching these comma-separated ASINs or document IDs.",
+    help="Only emit records matching these comma-separated keys, ASINs, or document IDs.",
 )
 @click.option(
     "--exclude",
     metavar="ID[,ID...]",
-    help="Omit records matching these comma-separated ASINs or document IDs.",
+    help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
 )
 @click.argument(
     "export_directory",
@@ -70,7 +70,7 @@ def main(
         }
         if not requested_ids:
             raise click.BadParameter(
-                "provide at least one ASIN or document ID", param_hint="--include"
+                "provide at least one key, ASIN, or document ID", param_hint="--include"
             )
 
     try:
@@ -89,7 +89,8 @@ def main(
         books = [
             book
             for book in books
-            if book.asin.casefold() in requested_ids
+            if book.key.casefold() in requested_ids
+            or book.asin.casefold() in requested_ids
             or book.document_id.casefold() in requested_ids
         ]
 
@@ -99,12 +100,13 @@ def main(
         }
         if not excluded_ids:
             raise click.BadParameter(
-                "provide at least one ASIN or document ID", param_hint="--exclude"
+                "provide at least one key, ASIN, or document ID", param_hint="--exclude"
             )
         books = [
             book
             for book in books
-            if book.asin.casefold() not in excluded_ids
+            if book.key.casefold() not in excluded_ids
+            and book.asin.casefold() not in excluded_ids
             and book.document_id.casefold() not in excluded_ids
         ]
 
@@ -117,7 +119,14 @@ def main(
 
     writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
     if raw:
-        writer.writerow(["synthetic->source", "synthetic->is_sample", *extra_headers])
+        writer.writerow(
+            [
+                "synthetic->key",
+                "synthetic->source",
+                "synthetic->is_sample",
+                *extra_headers,
+            ]
+        )
         writer.writerows(book.as_raw_row(extra_headers) for book in books)
     else:
         writer.writerow(HEADERS)

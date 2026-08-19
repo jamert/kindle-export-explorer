@@ -36,6 +36,7 @@ def clean_item_asin(value: object) -> str:
 class Book:
     asin: str = ""
     document_id: str = ""
+    content_kind: str = "ebook"
     title: str = ""
     authors: set[str] = field(default_factory=set)
     genres: set[str] = field(default_factory=set)
@@ -50,7 +51,9 @@ class Book:
 
     @property
     def key(self) -> str:
-        return self.asin or f"document:{self.document_id}"
+        if self.document_id:
+            return f"document:{self.document_id}"
+        return f"asin:{self.content_kind}:{self.asin}"
 
     def set_title(self, value: object, rank: int) -> None:
         title = clean(value)
@@ -80,6 +83,7 @@ class Book:
 
     def as_dict(self) -> dict[str, object]:
         return {
+            "key": self.key,
             "asin": self.asin,
             "document_id": self.document_id,
             "title": self.title,
@@ -93,6 +97,7 @@ class Book:
 
     def as_raw_dict(self, raw_headers: Iterable[str]) -> dict[str, object]:
         result: dict[str, object] = {
+            "synthetic->key": self.key,
             "synthetic->source": self.source,
             "synthetic->is_sample": self.is_sample,
         }
@@ -108,6 +113,7 @@ class Book:
 
     def as_row(self) -> list[str]:
         return [
+            self.key,
             self.asin,
             self.document_id,
             self.title,
@@ -121,6 +127,7 @@ class Book:
 
     def as_raw_row(self, raw_headers: Iterable[str]) -> list[str]:
         return [
+            self.key,
             self.source,
             "true" if self.is_sample else "false",
             *(
@@ -133,6 +140,7 @@ class Book:
 
 
 HEADERS = [
+    "key",
     "asin",
     "document_id",
     "title",
@@ -247,7 +255,11 @@ def reconstruct_books(
     books: dict[str, Book] = {}
     recognized = False
 
-    def get(asin: object = "", document_id: object = "") -> Book | None:
+    def get(
+        asin: object = "",
+        document_id: object = "",
+        content_kind: str = "ebook",
+    ) -> Book | None:
         asin_value = clean(asin)
         document_value = clean(document_id)
         if asin_value.casefold() == "invalid-asin":
@@ -256,11 +268,24 @@ def reconstruct_books(
             document_value = ""
         if not asin_value and not document_value:
             return None
-        key = asin_value or f"document:{document_value}"
+        if document_value:
+            content_kind = "document"
+            key = f"document:{document_value}"
+        else:
+            key = f"asin:{content_kind}:{asin_value}"
         book = books.get(key)
         if book is None:
-            book = books[key] = Book(asin=asin_value, document_id=document_value)
+            book = books[key] = Book(
+                asin=asin_value,
+                document_id=document_value,
+                content_kind=content_kind,
+                is_sample=content_kind == "sample",
+            )
         return book
+
+    def for_asin(asin: object) -> list[Book]:
+        asin_value = clean(asin)
+        return [book for book in books.values() if book.asin == asin_value]
 
     # Digital ownership is the broadest source for Kindle books and samples.
     ownership_files = _files_named(root, "Digital.Content.Ownership", ".json")
@@ -272,7 +297,20 @@ def reconstruct_books(
             resource = data.get("resource", {})
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
-        book = get(resource.get("ASIN"))
+        rights = [right for right in data.get("rights", []) if isinstance(right, dict)]
+        origins = {
+            clean(right.get("origin", {}).get("originType")).casefold()
+            for right in rights
+            if isinstance(right.get("origin"), dict)
+        }
+        is_sample_resource = (
+            clean(resource.get("resourceType")).casefold() == "kindleebooksample"
+            or "sample" in origins
+        )
+        book = get(
+            resource.get("ASIN"),
+            content_kind="sample" if is_sample_resource else "ebook",
+        )
         if book:
             source_path = normalize_sharded_path(root, path)
             book.source = "kindle"
@@ -281,9 +319,7 @@ def reconstruct_books(
                 source_path,
                 {f"resource.{name}": value for name, value in resource.items()},
             )
-            for right in data.get("rights", []):
-                if not isinstance(right, dict):
-                    continue
+            for right in rights:
                 book.add_raw(
                     source_path,
                     {
@@ -300,15 +336,6 @@ def reconstruct_books(
                             for name, value in origin.items()
                         },
                     )
-            origins = {
-                clean(right.get("origin", {}).get("originType")).casefold()
-                for right in data.get("rights", [])
-                if isinstance(right, dict) and isinstance(right.get("origin"), dict)
-            }
-            book.is_sample = book.is_sample or (
-                clean(resource.get("resourceType")).casefold() == "kindleebooksample"
-                or "sample" in origins
-            )
             book.is_default_content = book.is_default_content or bool(
                 origins & _DEFAULT_ORIGIN_TYPES
             )
@@ -326,8 +353,14 @@ def reconstruct_books(
         if clean(row.get("Ownership Type")).casefold() not in owner_types:
             continue
         asin = clean(row.get("ASIN"))
-        existing = books.get(asin)
-        book = get(asin)
+        content_kind = (
+            "sample"
+            if clean(row.get("Ownership Type")).casefold() == "sample owner"
+            else "ebook"
+        )
+        key = f"asin:{content_kind}:{asin}"
+        existing = books.get(key)
+        book = get(asin, content_kind=content_kind)
         if book:
             # ULI includes physical Amazon purchases. Kindle ownership evidence
             # takes precedence; an item found only in ULI is a print book.
@@ -352,8 +385,6 @@ def reconstruct_books(
                 ),
             )
             book.set_title(row.get("Product Name"), 50)
-            if clean(row.get("Ownership Type")).casefold() == "sample owner":
-                book.is_sample = True
             book.set_series(row.get("Series Title"), row.get("Position In Collection"), 10)
 
     # BookRelation contains intrinsic item-to-series catalog relations. Its
@@ -366,9 +397,10 @@ def reconstruct_books(
             continue
         book = get(row.get("ASIN"))
         if book:
-            book.source = "kindle"
-            book.add_raw(source_path, row, ("ASIN", "Product Name"))
-            book.set_title(row.get("Product Name"), 35)
+            for variant in for_asin(row.get("ASIN")):
+                variant.source = "kindle"
+                variant.add_raw(source_path, row, ("ASIN", "Product Name"))
+                variant.set_title(row.get("Product Name"), 35)
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
     document_paths = _files_named(root, "DocumentMetadata")
@@ -394,58 +426,65 @@ def reconstruct_books(
             continue
         item_asin = clean_item_asin(row.get("item-ASIN"))
         # Some rows connect nested series and have no item title; they are not books.
-        if not clean(row.get("item-product-name")) and item_asin not in books:
+        if not clean(row.get("item-product-name")) and not for_asin(item_asin):
             continue
         book = get(item_asin)
         if book:
-            book.source = "kindle"
-            book.add_raw(
-                source_path,
-                row,
-                (
-                    "record-type",
-                    "series-ASIN",
-                    "series-product-name",
-                    "item-ASIN",
-                    "item-product-name",
-                    "item-position-in-series",
-                ),
-            )
-            book.set_title(row.get("item-product-name"), 45)
-            book.set_series(row.get("series-product-name"), row.get("item-position-in-series"), 50)
+            for variant in for_asin(item_asin):
+                variant.source = "kindle"
+                variant.add_raw(
+                    source_path,
+                    row,
+                    (
+                        "record-type",
+                        "series-ASIN",
+                        "series-product-name",
+                        "item-ASIN",
+                        "item-product-name",
+                        "item-position-in-series",
+                    ),
+                )
+                variant.set_title(row.get("item-product-name"), 45)
+                variant.set_series(
+                    row.get("series-product-name"),
+                    row.get("item-position-in-series"),
+                    50,
+                )
 
     # Enrich established books from metadata-only ULI relations. These files do
     # not seed records, preventing recommendations and wish-list items leaking in.
     for source_path, row in _csv_rows(
         root, _files_named(root, "CustomerAuthorNameRelationship")
     ):
-        book = books.get(clean(row.get("ASIN")))
         author = clean(row.get("Author Name"))
-        if book and author:
-            book.authors.add(author)
-            book.add_raw(source_path, row)
+        for book in for_asin(row.get("ASIN")):
+            if author:
+                book.authors.add(author)
+                book.add_raw(source_path, row)
     for source_path, row in _csv_rows(
         root, _files_named(root, "CustomerAuthorIdRelationship")
     ):
-        book = books.get(clean(row.get("ASIN")))
-        if book:
+        for book in for_asin(row.get("ASIN")):
             book.add_raw(source_path, row)
     for source_path, row in _csv_rows(root, _files_named(root, "CustomerGenres")):
-        book = books.get(clean(row.get("ASIN")))
         genre = clean(row.get("Genre"))
-        if book and genre:
-            book.genres.add(genre)
-            book.add_raw(source_path, row)
+        for book in for_asin(row.get("ASIN")):
+            if genre:
+                book.genres.add(genre)
+                book.add_raw(source_path, row)
     for source_path, row in _csv_rows(
         root, _files_named(root, "CustomerRelationshipTypes")
     ):
-        book = books.get(clean(row.get("ASIN")))
-        if book and clean(row.get("Ownership Type")).casefold() in owner_types:
+        ownership_type = clean(row.get("Ownership Type")).casefold()
+        content_kind = "sample" if ownership_type == "sample owner" else "ebook"
+        book = books.get(f"asin:{content_kind}:{clean(row.get('ASIN'))}")
+        if book and ownership_type in owner_types:
             book.add_raw(source_path, row)
     book_tag_groups = {"author", "catalog", "genre", "media-concept-node"}
     for source_path, row in _csv_rows(root, _files_named(root, "CustomerTags")):
-        book = books.get(clean(row.get("ASIN")))
-        if book and clean(row.get("Tag Source Group")).casefold() in book_tag_groups:
+        if clean(row.get("Tag Source Group")).casefold() not in book_tag_groups:
+            continue
+        for book in for_asin(row.get("ASIN")):
             book.add_raw(
                 source_path,
                 row,

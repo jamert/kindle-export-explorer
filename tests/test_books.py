@@ -190,6 +190,51 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert sample[origin_type] == "Sample"
 
 
+def test_sample_and_ebook_are_deduplicated_by_synthetic_key(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    records = [
+        ("KindleEBookSample", "Sample", "2024-01-01T00:00:00Z"),
+        ("KindleEBook", "Purchase", "2024-01-02T00:00:00Z"),
+    ]
+    for number, (resource_type, origin_type, acquired) in enumerate(records, 1):
+        (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
+            json.dumps(
+                {
+                    "resource": {
+                        "ASIN": "BOTH",
+                        "Product Name": "Both Editions",
+                        "resourceType": resource_type,
+                    },
+                    "rights": [
+                        {
+                            "origin": {"originType": origin_type},
+                            "acquiredDate": acquired,
+                        }
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    default_books = reconstruct_books(tmp_path)
+    assert [book.key for book in default_books] == ["asin:ebook:BOTH"]
+
+    all_books = reconstruct_books(tmp_path, show_samples=True)
+    assert {book.key for book in all_books} == {
+        "asin:ebook:BOTH",
+        "asin:sample:BOTH",
+    }
+    assert {book.key: book.is_sample for book in all_books} == {
+        "asin:ebook:BOTH": False,
+        "asin:sample:BOTH": True,
+    }
+
+    result = CliRunner().invoke(main, ["--show-samples", str(tmp_path)])
+    rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
+    assert [row["key"] for row in rows] == ["asin:ebook:BOTH", "asin:sample:BOTH"]
+
+
 def test_raw_mode_exposes_three_acquisition_date_sources(tmp_path: Path) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
@@ -464,7 +509,7 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
 
     empty_result = runner.invoke(main, ["--include", " , ", str(tmp_path)])
     assert empty_result.exit_code != 0
-    assert "provide at least one ASIN or document ID" in empty_result.output
+    assert "provide at least one key, ASIN, or document ID" in empty_result.output
 
     removed_result = runner.invoke(main, ["--asin", "BOOK1", str(tmp_path)])
     assert removed_result.exit_code != 0
@@ -527,7 +572,7 @@ def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
 
     empty_result = runner.invoke(main, ["--exclude", " , ", str(tmp_path)])
     assert empty_result.exit_code != 0
-    assert "provide at least one ASIN or document ID" in empty_result.output
+    assert "provide at least one key, ASIN, or document ID" in empty_result.output
 
 
 def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
@@ -543,6 +588,7 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
     assert result.exit_code == 0
     rows = list(csv.reader(result.output.splitlines(), dialect="excel-tab"))
     assert rows[0] == [
+        "key",
         "asin",
         "document_id",
         "title",
@@ -553,5 +599,5 @@ def test_cli_prints_tsv_and_personal_documents(tmp_path: Path) -> None:
         "source",
         "is_sample",
     ]
-    assert rows[1][:3] == ["", "DOC1", "My Document"]
+    assert rows[1][:4] == ["document:DOC1", "", "DOC1", "My Document"]
     assert "EntryCreationDate" not in rows[0]

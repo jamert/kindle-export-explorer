@@ -33,8 +33,18 @@ uv run kindle-books --show-default /path/to/Kindle > books-with-defaults.tsv
 uv run kindle-books --source all --show-samples --show-default /path/to/Kindle > all-books.tsv
 ```
 
-The TSV includes an `is_sample` column. Purchased books are retained even when their
-titles contain words such as “dictionary” or “manual”; default-content filtering uses
+The first TSV column is a synthetic record key. Full books and samples with the same
+ASIN remain distinct and are deduplicated independently:
+
+```text
+asin:ebook:<ASIN>
+asin:sample:<ASIN>
+document:<DocumentId>
+```
+
+The original `asin` and `document_id` columns remain unchanged, and `is_sample`
+identifies sample records. Purchased books are retained even when their titles
+contain words such as “dictionary” or “manual”; default-content filtering uses
 Amazon's ownership origin metadata rather than title matching.
 
 Use `--raw` to append every connected book/source field available for the selected
@@ -53,8 +63,8 @@ uv run kindle-books --jsonl /path/to/Kindle > books.jsonl
 uv run kindle-books --json --raw /path/to/Kindle > books-raw.jsonl
 ```
 
-Select one or more records with a comma-separated, case-insensitive list of ASINs or
-personal-document IDs. `--include` works with both TSV and JSON Lines output and can
+Select one or more records with a comma-separated, case-insensitive list of synthetic
+keys, ASINs, or personal-document IDs. `--include` works with both TSV and JSON Lines output and can
 mix both identifier types. Explicit IDs override the source, sample, and default-
 content filters, so requested print books, samples, dictionaries, and user guides are
 returned without their corresponding `--source` or `--show-*` options:
@@ -74,12 +84,14 @@ uv run kindle-books --jsonl --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path
 ```
 
 In raw mode, every header states its provenance. Only values actually computed by
-the tool use `synthetic->{field_name}`; currently these are `source` and `is_sample`.
+the tool use `synthetic->{field_name}`; currently these are `key`, `source`, and
+`is_sample`.
 Fields read from the export use
 `{export-relative/path/to/file}->{field_name}`. JSON subfields retain their object
 path, for example:
 
 ```text
+synthetic->key
 synthetic->is_sample
 Digital.Content.Ownership/shard.json->resource.ASIN
 Digital.Content.Ownership/shard.json->resource.Product Name
