@@ -40,6 +40,7 @@ READING_PATH_MARKERS = (
     "Digital.Content.Whispersync/",
     "Kindle.Devices.autoMarkAsRead/",
     "Kindle.Devices.ReadingActionsContainers/",
+    "Kindle.Devices.ReadingActionsWidgets/",
     "Kindle.Devices.ReadingSession/",
     "reading-insights-sessions_with_adjustments",
 )

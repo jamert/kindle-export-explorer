@@ -74,6 +74,7 @@ def test_reading_toc_includes_sessions_sync_and_completion_markers(
         "Digital.Content.Whispersync/whispersync.csv",
         "Kindle.Devices.autoMarkAsRead/Kindle.Devices.autoMarkAsRead.csv",
         "Kindle.Devices.ReadingActionsContainers/Kindle.Devices.ReadingActionsContainers.csv",
+        "Kindle.Devices.ReadingActionsWidgets/Kindle.Devices.ReadingActionsWidgets.csv",
         "Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv",
         "Kindle.ReadingInsights/Kindle.reading-insights-sessions_with_adjustments.csv",
     ]
