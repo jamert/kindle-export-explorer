@@ -28,7 +28,8 @@ uv run kindle-books --extra /path/to/Kindle > books-extra.tsv
 ```
 
 Use `--jsonl` (or `--json`) for one JSON object per line. JSON preserves the nested
-`author` and `series` structures and arrays such as genres:
+`author` and `series` structures and arrays such as genres. Books without series
+metadata have `"series": null` when `--extra` is enabled:
 
 ```console
 uv run kindle-books --jsonl --extra /path/to/Kindle > books.jsonl

@@ -30,14 +30,16 @@ flowchart LR
 - `authors: Authors`
 - `ownership_digital: DigitalOwnership`
 - `ownership_print: bool`
-- `series: Series`
+- `series: Series | None`
 - `genres: list[str]`
 - `marketplace: str`
 
 The default CLI output contains the formatted key, its nullable ASIN and document-ID
 components, title, author, digital ownership, and print ownership. The sample flag
 remains internal to `CanonicalKey` and is represented by the formatted key rather than
-as a separate output field. `--extra` adds series, genres, and marketplace.
+as a separate output field. `--extra` adds series, genres, and marketplace. JSONL
+emits `series: null` when no series metadata exists; nullable series components remain
+empty TSV cells.
 
 ### Canonical key
 

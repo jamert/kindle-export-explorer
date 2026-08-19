@@ -84,9 +84,9 @@ class DigitalOwnership(StrEnum):
 
 @dataclass(frozen=True)
 class Series:
-    title: str = ""
-    asin: str = ""
-    position: str = ""
+    title: str | None
+    asin: str | None
+    position: str | None
 
 
 @dataclass(frozen=True)
@@ -96,7 +96,7 @@ class BookCanonical:
     authors: Authors
     ownership_digital: DigitalOwnership
     ownership_print: bool
-    series: Series
+    series: Series | None
     genres: list[str]
     marketplace: str
 
@@ -121,11 +121,15 @@ class BookCanonical:
         if extra:
             result.update(
                 {
-                    "series": {
-                        "title": self.series.title,
-                        "asin": self.series.asin,
-                        "position": self.series.position,
-                    },
+                    "series": (
+                        {
+                            "title": self.series.title,
+                            "asin": self.series.asin,
+                            "position": self.series.position,
+                        }
+                        if self.series is not None
+                        else None
+                    ),
                     "genres": self.genres,
                     "marketplace": self.marketplace,
                 }
@@ -145,9 +149,9 @@ class BookCanonical:
         if extra:
             row.extend(
                 (
-                    self.series.title,
-                    self.series.asin,
-                    self.series.position,
+                    (self.series.title or "") if self.series else "",
+                    (self.series.asin or "") if self.series else "",
+                    (self.series.position or "") if self.series else "",
                     _joined(self.genres),
                     self.marketplace,
                 )
@@ -166,15 +170,15 @@ class BookMetadata:
     the shared canonical book schema rather than to ownership.
     """
 
-    title: str = ""
+    title: str
     authors: list[str] = field(default_factory=list)
     author_asins: list[str] = field(default_factory=list)
     genres: set[str] = field(default_factory=set)
-    series_title: str = ""
-    series_position: str = ""
-    series_asin: str = ""
-    sortable_title: str = ""
-    sortable_author: str = ""
+    series_title: str | None = None
+    series_position: str | None = None
+    series_asin: str | None = None
+    sortable_title: str | None = None
+    sortable_author: str | None = None
     marketplaces: set[str] = field(default_factory=set)
     _title_rank: int = field(default=-1, repr=False)
     _series_rank: int = field(default=-1, repr=False)
@@ -195,17 +199,17 @@ class BookMetadata:
         series_title = clean(title)
         if series_title and rank >= self._series_rank:
             self.series_title = series_title
-            self.series_position = clean(position)
-            self.series_asin = clean(asin)
+            self.series_position = clean(position) or None
+            self.series_asin = clean(asin) or None
             self._series_rank = rank
 
 
 @dataclass
 class KindleBookRecord:
     asin: str
+    metadata: BookMetadata
     sample: bool = False
     default: bool = False
-    metadata: BookMetadata = field(default_factory=BookMetadata)
 
     @property
     def key(self) -> str:
@@ -216,7 +220,7 @@ class KindleBookRecord:
 @dataclass
 class PrintBookRecord:
     asin: str
-    metadata: BookMetadata = field(default_factory=BookMetadata)
+    metadata: BookMetadata
 
     @property
     def key(self) -> str:
@@ -297,6 +301,20 @@ class CanonicalizationService:
         names = list(metadata.authors)
         if not names and metadata.sortable_author:
             names.append(metadata.sortable_author)
+        series = None
+        if any(
+            value is not None
+            for value in (
+                metadata.series_title,
+                metadata.series_asin,
+                metadata.series_position,
+            )
+        ):
+            series = Series(
+                title=metadata.series_title,
+                asin=metadata.series_asin,
+                position=metadata.series_position,
+            )
         return BookCanonical(
             key=key,
             title=metadata.sortable_title or metadata.title,
@@ -306,11 +324,7 @@ class CanonicalizationService:
             ),
             ownership_digital=digital,
             ownership_print=print_owned,
-            series=Series(
-                title=metadata.series_title,
-                asin=metadata.series_asin,
-                position=metadata.series_position,
-            ),
+            series=series,
             genres=sorted(metadata.genres, key=str.casefold),
             marketplace=_select_marketplace(record.key, metadata.marketplaces),
         )
@@ -358,7 +372,7 @@ class CanonicalizationService:
             authors=Authors(names=names, asins=[]),
             ownership_digital=ownership,
             ownership_print=False,
-            series=Series(),
+            series=None,
             genres=[],
             marketplace="",
         )
@@ -376,6 +390,7 @@ class SourceRecordCatalog:
         self,
         asin: object,
         *,
+        title: object = "",
         sample: bool = False,
         create: bool = True,
     ) -> KindleBookRecord | None:
@@ -385,17 +400,30 @@ class SourceRecordCatalog:
         key = (asin_value, sample)
         record = self._kindle.get(key)
         if record is None and create:
-            record = KindleBookRecord(asin=asin_value, sample=sample)
+            record = KindleBookRecord(
+                asin=asin_value,
+                metadata=BookMetadata(title=clean(title)),
+                sample=sample,
+            )
             self._kindle[key] = record
         return record
 
-    def printed(self, asin: object, *, create: bool = True) -> PrintBookRecord | None:
+    def printed(
+        self,
+        asin: object,
+        *,
+        title: object = "",
+        create: bool = True,
+    ) -> PrintBookRecord | None:
         asin_value = _clean_identifier(asin)
         if not asin_value:
             return None
         record = self._print.get(asin_value)
         if record is None and create:
-            record = PrintBookRecord(asin=asin_value)
+            record = PrintBookRecord(
+                asin=asin_value,
+                metadata=BookMetadata(title=clean(title)),
+            )
             self._print[asin_value] = record
         return record
 
@@ -563,7 +591,11 @@ def reconstruct_books(
             clean(resource.get("resourceType")).casefold() == "kindleebooksample"
             or "sample" in origins
         )
-        book = catalog.kindle(resource.get("ASIN"), sample=is_sample_resource)
+        book = catalog.kindle(
+            resource.get("ASIN"),
+            title=resource.get("Product Name"),
+            sample=is_sample_resource,
+        )
         if book:
             book.metadata.set_title(resource.get("Product Name"), 30)
             book.default = book.default or bool(origins & _DEFAULT_ORIGIN_TYPES)
@@ -582,12 +614,19 @@ def reconstruct_books(
             continue
         asin = clean(row.get("ASIN"))
         if ownership_type == "sample owner":
-            asin_record = catalog.kindle(asin, sample=True)
+            asin_record = catalog.kindle(
+                asin,
+                title=row.get("Product Name"),
+                sample=True,
+            )
         else:
             # ULI repeats Kindle purchases and also contains physical purchases.
             # Existing digital ownership takes precedence; otherwise this is the
             # best available evidence for a print record.
-            asin_record = catalog.kindle(asin, create=False) or catalog.printed(asin)
+            asin_record = catalog.kindle(asin, create=False) or catalog.printed(
+                asin,
+                title=row.get("Product Name"),
+            )
         if asin_record:
             metadata = asin_record.metadata
             metadata.set_title(row.get("Product Name"), 50)

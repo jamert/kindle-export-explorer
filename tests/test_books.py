@@ -5,6 +5,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from kindle_export_reassembly import (
+    BookMetadata,
     CanonicalizationService,
     CanonicalKey,
     DocumentRecord,
@@ -31,12 +32,19 @@ def test_canonical_key_string_forms() -> None:
 
 
 def test_canonicalization_service_keeps_source_record_types_separate() -> None:
-    ebook = KindleBookRecord(asin="BOOK")
-    ebook.metadata.title = "Full Book"
-    sample = KindleBookRecord(asin="BOOK", sample=True)
-    sample.metadata.title = "Sample"
-    printed = PrintBookRecord(asin="PRINT")
-    printed.metadata.title = "Printed"
+    ebook = KindleBookRecord(
+        asin="BOOK",
+        metadata=BookMetadata(title="Full Book"),
+    )
+    sample = KindleBookRecord(
+        asin="BOOK",
+        metadata=BookMetadata(title="Sample"),
+        sample=True,
+    )
+    printed = PrintBookRecord(
+        asin="PRINT",
+        metadata=BookMetadata(title="Printed"),
+    )
     document = DocumentRecord(
         document_id="DOC",
         title="Document",
@@ -138,6 +146,7 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
     assert books[0].authors.names == ["Writer, Ada"]
     assert books[0].authors.asins == []
     assert books[0].genres == ["History"]
+    assert books[0].series is not None
     assert books[0].series.title == "A Series"
     assert books[0].series.position == "2"
 
@@ -528,6 +537,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert record["author"] == {"names": [], "asins": []}
         assert record["ownership_digital"] == "kindle_sample"
         assert record["ownership_print"] is False
+        assert record["series"] is None
         assert record["genres"] == []
 
 
