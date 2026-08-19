@@ -1,19 +1,24 @@
 # Kindle export reconstruction model
 
-The application uses two processing layers. Export records are first joined into an
-internal `JoinedBook`; canonical values are selected only after all relevant sources
-have been processed.
+The application keeps ownership-specific source records separate until all relevant
+sources have been joined. `CanonicalizationService` then converts each source type to
+`BookCanonical`.
 
 ```mermaid
 flowchart LR
-    O[Digital ownership] --> J[JoinedBook]
-    U[Unified Library Index] --> J
-    D[Personal-document metadata] --> J
-    S[Saga series metadata] --> J
-    A[Author and genre relations] --> J
-    J --> C[BookCanonical]
-    C --> F[CLI filtering]
-    F --> T[TSV or JSONL]
+    O[Digital ownership] --> K[KindleBookRecord]
+    U[Unified Library Index] --> K
+    U --> P[PrintBookRecord]
+    D[Personal-document metadata] --> D2[DocumentRecord]
+    S[Series metadata] --> K
+    S --> P
+    A[Author and genre relations] --> K
+    A --> P
+    K --> C[CanonicalizationService]
+    P --> C
+    D2 --> C
+    C --> B[BookCanonical]
+    B --> F[CLI filtering and output]
 ```
 
 ## Canonical schema
@@ -79,8 +84,11 @@ represent simultaneous print and Kindle ownership under one ASIN.
 
 ## Source joins
 
-Books and samples join by ASIN and are deduplicated by canonical content-variant key.
-Personal documents join by `DocumentId`. Saga item identifiers with the
+Kindle ebook and sample rows are accumulated as separate `KindleBookRecord` objects,
+deduplicated by ASIN and variant. They are grouped by ASIN when passed to
+`CanonicalizationService.convert_kindle(*records)`, but currently remain separate
+canonical outputs. Print records are deduplicated by ASIN, while personal documents
+are deduplicated by `DocumentId`. Saga item identifiers with the
 `urn:collection:1:asin-` prefix are normalized before joining.
 
 No joins use title, author name, author ID, order ID, filename, or fuzzy matching.

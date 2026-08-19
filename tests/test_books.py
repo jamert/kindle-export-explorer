@@ -4,7 +4,14 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kindle_export_reassembly import CanonicalKey, main
+from kindle_export_reassembly import (
+    CanonicalizationService,
+    CanonicalKey,
+    DocumentRecord,
+    KindleBookRecord,
+    PrintBookRecord,
+    main,
+)
 from kindle_export_reassembly.books import normalize_sharded_path, reconstruct_books
 
 
@@ -21,6 +28,34 @@ def test_canonical_key_string_forms() -> None:
     assert str(CanonicalKey(asin="BOOK", sample=False)) == "asin:ebook:BOOK"
     assert str(CanonicalKey(asin="BOOK", sample=True)) == "asin:sample:BOOK"
     assert str(CanonicalKey(document_id="DOC")) == "document:DOC"
+
+
+def test_canonicalization_service_keeps_source_record_types_separate() -> None:
+    ebook = KindleBookRecord(asin="BOOK")
+    ebook.metadata.title = "Full Book"
+    sample = KindleBookRecord(asin="BOOK", sample=True)
+    sample.metadata.title = "Sample"
+    printed = PrintBookRecord(asin="PRINT")
+    printed.metadata.title = "Printed"
+    document = DocumentRecord(
+        document_id="DOC",
+        title="Document",
+        provider="Provider",
+    )
+
+    kindle = CanonicalizationService.convert_kindle(ebook, sample)
+    assert [str(book.key) for book in kindle] == [
+        "asin:ebook:BOOK",
+        "asin:sample:BOOK",
+    ]
+    assert str(CanonicalizationService.convert_print(printed).key) == (
+        "asin:ebook:PRINT"
+    )
+    canonical_document = CanonicalizationService.convert_document(document)
+    assert str(canonical_document.key) == "document:DOC"
+    assert canonical_document.authors.names == ["Provider"]
+    assert not hasattr(document, "genres")
+    assert not hasattr(document, "marketplaces")
 
 
 def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path) -> None:
