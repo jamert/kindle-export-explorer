@@ -9,6 +9,16 @@ from pathlib import Path
 
 import click
 
+from .acquisitions import (
+    AcquisitionCanonicalizationService,
+    AcquisitionEvent,
+    AcquisitionEventType,
+    BookAcquisition,
+    DocumentAcquisitionRecord,
+    KindleAcquisitionRecord,
+    PrintAcquisitionRecord,
+    reconstruct_acquisitions,
+)
 from .books import (
     EXTRA_HEADERS,
     HEADERS,
@@ -155,16 +165,24 @@ def _write_tsv(books: list[BookCanonical], extra: bool) -> None:
 
 
 __all__ = [
+    "AcquisitionCanonicalizationService",
+    "AcquisitionEvent",
+    "AcquisitionEventType",
     "Authors",
+    "BookAcquisition",
     "BookCanonical",
     "BookMetadata",
     "CanonicalizationService",
     "CanonicalKey",
     "DigitalOwnership",
+    "DocumentAcquisitionRecord",
     "DocumentRecord",
+    "KindleAcquisitionRecord",
     "KindleBookRecord",
+    "PrintAcquisitionRecord",
     "PrintBookRecord",
     "Series",
     "main",
+    "reconstruct_acquisitions",
     "reconstruct_books",
 ]

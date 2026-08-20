@@ -71,6 +71,23 @@ When one canonical key has conflicting marketplaces, the program warns on stderr
 prefers the `.com` marketplace. Without `.com`, it chooses the first marketplace by
 sorted domain.
 
+## Acquisition timelines
+
+The Python API also reconstructs acquisition events separately from intrinsic book
+metadata:
+
+```python
+from kindle_export_reassembly import reconstruct_acquisitions
+
+acquisitions = reconstruct_acquisitions(export_directory)
+```
+
+Each `BookAcquisition` uses the same `CanonicalKey` as `BookCanonical` and contains a
+chronological event list. Kindle `rights.acquiredDate` supplies sample, purchase, and
+default-content events; ULI `Relationship Creation Date` supplies the best available
+print-acquisition timestamp; personal documents use `EntryCreationDate`. Content
+consumption/download records are deliberately ignored.
+
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.

@@ -116,9 +116,32 @@ name when a book has multiple authors.
 - The Cloud Drive notice is identified by provider and filename rather than its
   account-specific document ID.
 
+## Acquisition timeline
+
+Acquisition reconstruction is a separate pipeline in `acquisitions.py`:
+
+```text
+KindleAcquisitionRecord ─┐
+PrintAcquisitionRecord ──┼─> AcquisitionCanonicalizationService ─> BookAcquisition
+DocumentAcquisitionRecord┘
+```
+
+`BookAcquisition` shares `CanonicalKey` with `BookCanonical` and contains chronological
+`AcquisitionEvent` values:
+
+- `sample_acquired` from Digital Ownership `rights.acquiredDate` with Sample origin
+- `kindle_purchased` from `rights.acquiredDate` with Purchase origin
+- `kindle_default_acquired` for dictionary and user-guide origins
+- `print_acquired` from ULI `Relationship Creation Date`
+- `document_created` from DocumentMetadata `EntryCreationDate`
+
+The print timestamp indicates when ULI ownership was recorded; it is not guaranteed to
+be the retail transaction time. CustomerOrders has order identifiers but no timestamp,
+so it is not used. Digital Ownership content-consumption dates describe downloads and
+are also excluded from acquisition events.
+
 ## Deliberately separate activity
 
 Reading sessions, Reading Insights, Whispersync annotations/state, completion events,
 content updates, and device activity are not joined into `BookCanonical`. They are
 event or device entities referencing logical content, not intrinsic book metadata.
-CustomerOrders is likewise a transaction entity and is not joined.
