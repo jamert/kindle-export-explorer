@@ -64,6 +64,14 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "299500",
                 "12",
             ],
+            [
+                "BOOK",
+                "2024-01-01T10:06:00Z",
+                "2024-01-01T10:07:00Z",
+                "E-Book",
+                "0",
+                "0",
+            ],
             ["Not Available", "", "2024-01-01T11:00:00Z", "SIDE", "", ""],
         ],
     )
@@ -177,13 +185,24 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
 
     assert set(by_key) == {"asin:BOOK", "document:DOC-ID"}
     book = by_key["asin:BOOK"]
-    assert len(book.device_sessions) == 1
+    assert len(book.device_sessions) == 2
     assert book.device_sessions[0].content_type == "E-Book Sample"
     assert book.device_sessions[0].start == datetime(
         2024, 1, 1, 10, tzinfo=timezone.utc
     )
     assert book.device_sessions[0].total_reading_millis == 299500
     assert book.device_sessions[0].number_of_page_flips == 12
+    assert book.device_sessions_summary.start == datetime(
+        2024, 1, 1, 10, tzinfo=timezone.utc
+    )
+    assert book.device_sessions_summary.end == datetime(
+        2024, 1, 1, 10, 7, tzinfo=timezone.utc
+    )
+    assert book.device_sessions_summary.total_reading_millis == 299500
+    assert book.device_sessions_summary.total_reading_humanized == "5m"
+    assert book.device_sessions_summary.total_page_flips == 12
+    assert book.device_sessions_summary.total_count == 2
+    assert book.device_sessions_summary.non_zero_count == 1
     assert len(book.insights_sessions) == 1
     assert book.insights_sessions[0].start == datetime(
         2024, 1, 1, 10, 0, 0, 500000, tzinfo=timezone.utc
@@ -211,6 +230,15 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert output["title"] == "The Book Title"
     assert output["device_sessions"][0]["start"] == "2024-01-01T10:00:00+00:00"
     assert output["device_sessions"][0]["content_type"] == "E-Book Sample"
+    assert output["device_sessions_summary"] == {
+        "start": "2024-01-01T10:00:00+00:00",
+        "end": "2024-01-01T10:07:00+00:00",
+        "total_reading_millis": 299500,
+        "total_reading_humanized": "5m",
+        "total_page_flips": 12,
+        "total_count": 2,
+        "non_zero_count": 1,
+    }
     assert "asin" not in output["device_sessions"][0]
     assert "preferred_marketplace" not in output["device_sessions"][0]
     assert "purchased_marketplace" not in output["device_sessions"][0]

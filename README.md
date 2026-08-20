@@ -117,8 +117,10 @@ Whispersync retains only `kindle.last_read` and `kindle.most_recent_read`.
 customer-modified timestamp updates duplicates `kindle.most_recent_read` in the
 profiled export, so it contributes no additional observable reading evidence.
 
-Inspect one book's records as JSON with its canonical key. The command joins the
-canonical title from the ownership metadata:
+Inspect one book's records as JSON with its canonical key. The command joins the canonical title from the ownership metadata and includes a
+`device_sessions_summary` with the minimum start, maximum end, summed non-zero reading
+milliseconds, a minute-resolution humanized duration such as `5h14m`, summed page
+flips, total session count, and count of sessions with non-zero reading time:
 
 ```console
 uv run kindle-reading asin:B004PYDAPE /path/to/Kindle

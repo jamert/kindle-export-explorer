@@ -13,6 +13,17 @@ from .books import CanonicalKey, ExportError, ExportFiles, clean
 
 # Per-book reading record collection
 
+@dataclass(frozen=True)
+class DeviceSessionsSummary:
+    start: datetime | None
+    end: datetime | None
+    total_reading_millis: int
+    total_reading_humanized: str
+    total_page_flips: int
+    total_count: int
+    non_zero_count: int
+
+
 @dataclass
 class BookReading:
     key: CanonicalKey
@@ -26,6 +37,31 @@ class BookReading:
         default_factory=list
     )
     completion_records: list[TitleCompletionRecord] = field(default_factory=list)
+
+    @property
+    def device_sessions_summary(self) -> DeviceSessionsSummary:
+        starts = [session.start for session in self.device_sessions if session.start]
+        ends = [session.end for session in self.device_sessions if session.end]
+        reading_millis = [
+            session.total_reading_millis
+            for session in self.device_sessions
+            if session.total_reading_millis
+        ]
+        page_flips = [
+            session.number_of_page_flips
+            for session in self.device_sessions
+            if session.number_of_page_flips
+        ]
+        total_reading_millis = sum(reading_millis)
+        return DeviceSessionsSummary(
+            start=min(starts, default=None),
+            end=max(ends, default=None),
+            total_reading_millis=total_reading_millis,
+            total_reading_humanized=_humanize_millis(total_reading_millis),
+            total_page_flips=sum(page_flips),
+            total_count=len(self.device_sessions),
+            non_zero_count=len(reading_millis),
+        )
 
 
 # Public reconstruction pipeline
@@ -155,6 +191,14 @@ class ReadingSourceCatalog:
 
     def _for_key(self, key: CanonicalKey) -> BookReading:
         return self._records.setdefault(key, BookReading(key=key))
+
+
+# Aggregation details
+
+def _humanize_millis(value: int) -> str:
+    total_minutes = (value + 30_000) // 60_000
+    hours, minutes = divmod(total_minutes, 60)
+    return f"{hours}h{minutes}m" if hours else f"{minutes}m"
 
 
 # Export parsing details
