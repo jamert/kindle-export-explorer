@@ -26,8 +26,7 @@ def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str
 
 
 def test_canonical_key_string_forms() -> None:
-    assert str(CanonicalKey(asin="BOOK", sample=False)) == "asin:ebook:BOOK"
-    assert str(CanonicalKey(asin="BOOK", sample=True)) == "asin:sample:BOOK"
+    assert str(CanonicalKey(asin="BOOK")) == "asin:BOOK"
     assert str(CanonicalKey(document_id="DOC")) == "document:DOC"
 
 
@@ -52,13 +51,9 @@ def test_canonicalization_service_keeps_source_record_types_separate() -> None:
     )
 
     kindle = CanonicalizationService.convert_kindle(ebook, sample)
-    assert [str(book.key) for book in kindle] == [
-        "asin:ebook:BOOK",
-        "asin:sample:BOOK",
-    ]
-    assert str(CanonicalizationService.convert_print(printed).key) == (
-        "asin:ebook:PRINT"
-    )
+    assert [str(book.key) for book in kindle] == ["asin:BOOK"]
+    assert kindle[0].ownership_digital == "kindle_ebook"
+    assert str(CanonicalizationService.convert_print(printed).key) == "asin:PRINT"
     canonical_document = CanonicalizationService.convert_document(document)
     assert str(canonical_document.key) == "document:DOC"
     assert canonical_document.authors.names == ["Provider"]
@@ -212,9 +207,9 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
 
     assert [book.asin for book in reconstruct_books(tmp_path)] == ["FULL"]
     books = reconstruct_books(tmp_path, show_samples=True)
-    assert {book.asin: book.key.sample for book in books} == {
-        "FULL": False,
-        "SAMPLE": True,
+    assert {book.asin: book.ownership_digital for book in books} == {
+        "FULL": "kindle_ebook",
+        "SAMPLE": "kindle_sample",
     }
 
     runner = CliRunner()
@@ -224,11 +219,11 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
     assert "SAMPLE" not in default_result.output
     assert "SAMPLE" in shown_result.output
     rows = list(csv.DictReader(shown_result.output.splitlines(), dialect="excel-tab"))
-    sample = next(row for row in rows if row["key"] == "asin:sample:SAMPLE")
+    sample = next(row for row in rows if row["key"] == "asin:SAMPLE")
     assert sample["ownership_digital"] == "kindle_sample"
 
 
-def test_sample_and_ebook_are_deduplicated_by_synthetic_key(tmp_path: Path) -> None:
+def test_sample_and_ebook_are_merged_by_asin(tmp_path: Path) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
     records = [
@@ -288,30 +283,23 @@ def test_sample_and_ebook_are_deduplicated_by_synthetic_key(tmp_path: Path) -> N
     )
 
     default_books = reconstruct_books(tmp_path)
-    assert [str(book.key) for book in default_books] == ["asin:ebook:BOTH"]
+    assert [str(book.key) for book in default_books] == ["asin:BOTH"]
 
     all_books = reconstruct_books(tmp_path, show_samples=True)
-    assert {str(book.key) for book in all_books} == {
-        "asin:ebook:BOTH",
-        "asin:sample:BOTH",
-    }
-    assert {str(book.key): book.key.sample for book in all_books} == {
-        "asin:ebook:BOTH": False,
-        "asin:sample:BOTH": True,
-    }
-    assert {tuple(book.authors.names) for book in all_books} == {
-        ("Writer, Primary", "Writer, Second")
-    }
-    assert {tuple(book.authors.asins) for book in all_books} == {
-        ("AUTHOR-1", "AUTHOR-2")
-    }
+    assert [str(book.key) for book in all_books] == ["asin:BOTH"]
+    assert all_books[0].ownership_digital == "kindle_ebook"
+    assert tuple(all_books[0].authors.names) == (
+        "Writer, Primary",
+        "Writer, Second",
+    )
+    assert tuple(all_books[0].authors.asins) == ("AUTHOR-1", "AUTHOR-2")
 
     result = CliRunner().invoke(main, ["--show-samples", str(tmp_path)])
     rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
-    assert [row["key"] for row in rows] == ["asin:ebook:BOTH", "asin:sample:BOTH"]
+    assert [row["key"] for row in rows] == ["asin:BOTH"]
 
 
-def test_extra_adds_series_genres_and_marketplace(tmp_path: Path) -> None:
+def test_extra_adds_series_genres_and_link(tmp_path: Path) -> None:
     write_csv(
         tmp_path,
         "uli/CustomerRelationshipIndex.1.csv",
@@ -365,7 +353,8 @@ def test_extra_adds_series_genres_and_marketplace(tmp_path: Path) -> None:
     assert row["series_asin"] == "SERIES-1"
     assert row["series_position"] == "3"
     assert row["genres"] == "History"
-    assert row["marketplace"] == "www.amazon.com"
+    assert "marketplace" not in row
+    assert row["link"] == "https://www.amazon.com/dp/PRINT"
 
     removed_raw = runner.invoke(main, ["--raw", str(tmp_path)])
     assert removed_raw.exit_code != 0
@@ -414,7 +403,8 @@ def test_canonical_uses_sortable_author_only_as_fallback(
     row = next(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
     assert row["title"] == "Example, The"
     assert row["author"] == "Writer, Ada"
-    assert row["marketplace"] == "www.amazon.com"
+    assert "marketplace" not in row
+    assert row["link"] == "https://www.amazon.com/dp/PRINT"
     assert "multiple marketplaces" in result.stderr
     assert "using www.amazon.com" in result.stderr
 
@@ -500,7 +490,7 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
     result = CliRunner().invoke(main, ["--extra", str(tmp_path)])
     assert result.exit_code == 0
     rows = list(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
-    assert [row["key"] for row in rows] == ["asin:ebook:BOOK"]
+    assert [row["key"] for row in rows] == ["asin:BOOK"]
     assert "ACTIVITY" not in result.output
     assert "UPDATE" not in result.output
     assert "COMPLETED" not in result.output
@@ -530,7 +520,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         lines = result.output.splitlines()
         assert len(lines) == 1
         record = json.loads(lines[0])
-        assert record["key"] == "asin:sample:SAMPLE"
+        assert record["key"] == "asin:SAMPLE"
         assert record["asin"] == "SAMPLE"
         assert record["document_id"] is None
         assert record["title"] == "Échantillon"
@@ -539,6 +529,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert record["ownership_print"] is False
         assert record["series"] is None
         assert record["genres"] == []
+        assert record["link"] is None
 
 
 def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
@@ -593,14 +584,14 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     assert tsv_result.exit_code == 0
     tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
     assert {row["key"] for row in tsv_rows} == {
-        "asin:ebook:BOOK1",
-        "asin:sample:SAMPLE",
-        "asin:ebook:PRINT",
+        "asin:BOOK1",
+        "asin:SAMPLE",
+        "asin:PRINT",
         "document:DOC-123",
     }
-    sample = next(row for row in tsv_rows if row["key"] == "asin:sample:SAMPLE")
+    sample = next(row for row in tsv_rows if row["key"] == "asin:SAMPLE")
     assert sample["ownership_digital"] == "kindle_sample"
-    printed = next(row for row in tsv_rows if row["key"] == "asin:ebook:PRINT")
+    printed = next(row for row in tsv_rows if row["key"] == "asin:PRINT")
     assert printed["ownership_digital"] == "unknown"
     assert printed["ownership_print"] == "true"
 
@@ -609,7 +600,7 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     )
     assert json_result.exit_code == 0
     json_rows = [json.loads(line) for line in json_result.output.splitlines()]
-    assert [row["key"] for row in json_rows] == ["asin:ebook:BOOK2"]
+    assert [row["key"] for row in json_rows] == ["asin:BOOK2"]
 
     empty_result = runner.invoke(main, ["--include", " , ", str(tmp_path)])
     assert empty_result.exit_code != 0
@@ -651,8 +642,8 @@ def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     assert tsv_result.exit_code == 0
     tsv_rows = list(csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab"))
     assert {row["key"] for row in tsv_rows} == {
-        "asin:ebook:BOOK2",
-        "asin:ebook:BOOK3",
+        "asin:BOOK2",
+        "asin:BOOK3",
     }
 
     json_result = runner.invoke(
@@ -668,7 +659,7 @@ def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
     )
     assert json_result.exit_code == 0
     json_rows = [json.loads(line) for line in json_result.output.splitlines()]
-    assert [row["key"] for row in json_rows] == ["asin:ebook:BOOK1"]
+    assert [row["key"] for row in json_rows] == ["asin:BOOK1"]
 
     unknown_result = runner.invoke(main, ["--exclude", "missing", str(tmp_path)])
     assert unknown_result.exit_code == 0

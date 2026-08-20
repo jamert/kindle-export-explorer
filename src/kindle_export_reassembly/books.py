@@ -56,14 +56,12 @@ def _joined(values: Iterable[str]) -> str:
 @dataclass(frozen=True)
 class CanonicalKey:
     asin: str | None = None
-    sample: bool | None = None
     document_id: str | None = None
 
     def __str__(self) -> str:
         if self.document_id is not None:
             return f"document:{self.document_id}"
-        kind = _SAMPLE_KIND if self.sample else _EBOOK_KIND
-        return f"asin:{kind}:{self.asin or ''}"
+        return f"asin:{self.asin or ''}"
 
 
 @dataclass(frozen=True)
@@ -108,6 +106,12 @@ class BookCanonical:
     def document_id(self) -> str:
         return self.key.document_id or ""
 
+    @property
+    def link(self) -> str | None:
+        if self.marketplace and self.key.asin:
+            return f"https://{self.marketplace}/dp/{self.key.asin}"
+        return None
+
     def as_dict(self, *, extra: bool = False) -> dict[str, object]:
         result: dict[str, object] = {
             "key": str(self.key),
@@ -131,7 +135,7 @@ class BookCanonical:
                         else None
                     ),
                     "genres": self.genres,
-                    "marketplace": self.marketplace,
+                    "link": self.link,
                 }
             )
         return result
@@ -153,7 +157,7 @@ class BookCanonical:
                     (self.series.asin or "") if self.series else "",
                     (self.series.position or "") if self.series else "",
                     _joined(self.genres),
-                    self.marketplace,
+                    self.link or "",
                 )
             )
         return row
@@ -224,7 +228,7 @@ class PrintBookRecord:
 
     @property
     def key(self) -> str:
-        return f"asin:{_EBOOK_KIND}:{self.asin}"
+        return f"asin:{self.asin}"
 
 
 @dataclass
@@ -256,7 +260,7 @@ EXTRA_HEADERS = [
     "series_asin",
     "series_position",
     "genres",
-    "marketplace",
+    "link",
 ]
 
 
@@ -291,13 +295,12 @@ class CanonicalizationService:
     """Convert ownership-specific source records into canonical books."""
 
     @staticmethod
-    def _convert_asin_record(
-        record: AsinBookRecord,
+    def _convert_metadata(
+        metadata: BookMetadata,
         key: CanonicalKey,
         digital: DigitalOwnership,
         print_owned: bool,
     ) -> BookCanonical:
-        metadata = record.metadata
         names = list(metadata.authors)
         if not names and metadata.sortable_author:
             names.append(metadata.sortable_author)
@@ -321,34 +324,70 @@ class CanonicalizationService:
             ownership_print=print_owned,
             series=series,
             genres=sorted(metadata.genres, key=str.casefold),
-            marketplace=_select_marketplace(record.key, metadata.marketplaces),
+            marketplace=_select_marketplace(str(key), metadata.marketplaces),
         )
 
     @staticmethod
-    def convert_kindle(*records: KindleBookRecord) -> list[BookCanonical]:
-        result = []
-        for record in records:
-            if record.default:
-                ownership = DigitalOwnership.DEFAULT
-            elif record.sample:
-                ownership = DigitalOwnership.KINDLE_SAMPLE
-            else:
-                ownership = DigitalOwnership.KINDLE_EBOOK
-            result.append(
-                CanonicalizationService._convert_asin_record(
-                    record,
-                    CanonicalKey(asin=record.asin, sample=record.sample),
-                    ownership,
-                    False,
-                )
+    def _merge_kindle_metadata(*records: KindleBookRecord) -> BookMetadata:
+        preferred = sorted(records, key=lambda record: record.sample)
+        merged = BookMetadata(
+            title=next(
+                (record.metadata.title for record in preferred if record.metadata.title),
+                "",
             )
-        return result
+        )
+        for record in preferred:
+            metadata = record.metadata
+            if merged.sortable_title is None and metadata.sortable_title is not None:
+                merged.sortable_title = metadata.sortable_title
+            if merged.sortable_author is None and metadata.sortable_author is not None:
+                merged.sortable_author = metadata.sortable_author
+            if merged.series_title is None and metadata.series_title is not None:
+                merged.series_title = metadata.series_title
+                merged.series_asin = metadata.series_asin
+                merged.series_position = metadata.series_position
+            for name in metadata.authors:
+                if name not in merged.authors:
+                    merged.authors.append(name)
+            for asin in metadata.author_asins:
+                if asin not in merged.author_asins:
+                    merged.author_asins.append(asin)
+            merged.genres.update(metadata.genres)
+            merged.marketplaces.update(metadata.marketplaces)
+        return merged
+
+    @staticmethod
+    def convert_kindle(*records: KindleBookRecord) -> list[BookCanonical]:
+        if not records:
+            return []
+        asin = records[0].asin
+        full_record = next((record for record in records if not record.sample), None)
+        if full_record is not None:
+            ownership = (
+                DigitalOwnership.DEFAULT
+                if full_record.default
+                else DigitalOwnership.KINDLE_EBOOK
+            )
+        else:
+            ownership = (
+                DigitalOwnership.DEFAULT
+                if any(record.default for record in records)
+                else DigitalOwnership.KINDLE_SAMPLE
+            )
+        return [
+            CanonicalizationService._convert_metadata(
+                CanonicalizationService._merge_kindle_metadata(*records),
+                CanonicalKey(asin=asin),
+                ownership,
+                False,
+            )
+        ]
 
     @staticmethod
     def convert_print(record: PrintBookRecord) -> BookCanonical:
-        return CanonicalizationService._convert_asin_record(
-            record,
-            CanonicalKey(asin=record.asin, sample=False),
+        return CanonicalizationService._convert_metadata(
+            record.metadata,
+            CanonicalKey(asin=record.asin),
             DigitalOwnership.UNKNOWN,
             True,
         )
@@ -709,13 +748,18 @@ def reconstruct_books(
     result: list[BookCanonical] = []
     if source in {"kindle", "all"}:
         for group in catalog.kindle_groups():
-            visible = tuple(
-                record
-                for record in group
-                if (show_default or not record.default)
-                and (show_samples or not record.sample)
+            full_record = next(
+                (record for record in group if not record.sample),
+                None,
             )
-            result.extend(CanonicalizationService.convert_kindle(*visible))
+            if full_record is not None:
+                if show_default or not full_record.default:
+                    result.extend(CanonicalizationService.convert_kindle(*group))
+            elif show_samples:
+                visible = tuple(
+                    record for record in group if show_default or not record.default
+                )
+                result.extend(CanonicalizationService.convert_kindle(*visible))
         result.extend(
             CanonicalizationService.convert_document(record)
             for record in catalog.document_records()

@@ -20,8 +20,8 @@ key  asin  document_id  title  author  ownership_digital  ownership_print
 or `personal_document`. `ownership_print` is true only for a Unified Library Index
 ownership record without digital-ownership evidence.
 
-Use `--extra` to add series title, series ASIN, series position, genres, and
-marketplace:
+Use `--extra` to add series title, series ASIN, series position, genres, and a
+marketplace product link:
 
 ```console
 uv run kindle-books --extra /path/to/Kindle > books-extra.tsv
@@ -37,13 +37,15 @@ uv run kindle-books --jsonl --extra /path/to/Kindle > books.jsonl
 
 ## Keys and filtering
 
-Canonical keys retain separate purchased and sample variants:
+Canonical keys identify Amazon books by ASIN and personal documents by document ID:
 
 ```text
-asin:ebook:<ASIN>
-asin:sample:<ASIN>
+asin:<ASIN>
 document:<DocumentId>
 ```
+
+A Kindle sample and full ebook with the same ASIN are merged. The merged record has
+`ownership_digital=kindle_ebook`; a sample-only record remains `kindle_sample`.
 
 Samples, Kindle defaults, and Amazon's Cloud Drive notice are hidden by default.
 Print-only records are available with `--source print`; use `--source all` for every

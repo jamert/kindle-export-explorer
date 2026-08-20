@@ -34,22 +34,23 @@ flowchart LR
   ASIN and position
 - `genres: list[str]`
 - `marketplace: str`
+- computed `link: str | None` (`https://{marketplace}/dp/{asin}`)
 
 The default CLI output contains the formatted key, its nullable ASIN and document-ID
-components, title, author, digital ownership, and print ownership. The sample flag
-remains internal to `CanonicalKey` and is represented by the formatted key rather than
-as a separate output field. `--extra` adds series, genres, and marketplace. JSONL
+components, title, author, digital ownership, and print ownership. Sample status is
+represented by `ownership_digital`, not by the canonical key or a separate output
+field. `--extra` adds series, genres, and the computed product link. Marketplace is
+retained internally only to construct the link. JSONL
 emits `series: null` when no series metadata exists; nullable series components remain
 empty TSV cells.
 
 ### Canonical key
 
-`CanonicalKey` retains the source ASIN/sample distinction or a personal-document ID.
-Its string representation is:
+`CanonicalKey` contains either an Amazon ASIN or a personal-document ID. Its string
+representation is:
 
 ```text
-asin:ebook:<ASIN>
-asin:sample:<ASIN>
+asin:<ASIN>
 document:<DocumentId>
 ```
 
@@ -91,10 +92,10 @@ represent simultaneous print and Kindle ownership under one ASIN.
 ## Source joins
 
 Kindle ebook and sample rows are accumulated as separate `KindleBookRecord` objects,
-deduplicated by ASIN and variant. They are grouped by ASIN when passed to
-`CanonicalizationService.convert_kindle(*records)`, but currently remain separate
-canonical outputs. Print records are deduplicated by ASIN, while personal documents
-are deduplicated by `DocumentId`. Saga item identifiers with the
+deduplicated by ASIN and variant. `CanonicalizationService.convert_kindle(*records)`
+merges each ASIN group into one canonical output. Full-ebook ownership takes precedence
+over sample ownership. Print records are deduplicated by ASIN, while personal
+documents are deduplicated by `DocumentId`. Saga item identifiers with the
 `urn:collection:1:asin-` prefix are normalized before joining.
 
 No joins use title, author name, author ID, order ID, filename, or fuzzy matching.
