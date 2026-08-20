@@ -113,6 +113,14 @@ Whispersync records, reading-action containers and widgets, automatic mark-as-re
 records, and title-completion records. Sample/full provenance remains on each source
 record. Records without an ASIN or an exact personal-document ID are omitted.
 
+Inspect one book's records as JSON with its canonical key. The command joins the
+canonical title from the ownership metadata:
+
+```console
+uv run kindle-reading asin:B004PYDAPE /path/to/Kindle
+uv run kindle-reading document:3TH4XYQKJZXM3ZEXIR6IZODX6IMC4YAD /path/to/Kindle
+```
+
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.

@@ -1,8 +1,12 @@
 import csv
+import json
 from datetime import date, datetime, timezone
 from pathlib import Path
 
+from click.testing import CliRunner
+
 from kindle_export_reassembly import reconstruct_reading
+from kindle_export_reassembly.reading_cli import main as reading_main
 
 
 def write_csv(
@@ -20,6 +24,26 @@ def write_csv(
 
 
 def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
+    ownership = tmp_path / "Digital.Content.Ownership"
+    ownership.mkdir()
+    (ownership / "Digital.Content.Ownership.1.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "BOOK",
+                    "Product Name": "The Book Title",
+                    "resourceType": "KindleEBook",
+                },
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "origin": {"originType": "Purchase"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     write_csv(
         tmp_path,
         "Kindle.Devices.ReadingSession/Kindle.Devices.ReadingSession.csv",
@@ -174,3 +198,17 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert len(document.whispersync_records) == 1
     assert document.whispersync_records[0].is_deleted is True
     assert not document.device_sessions
+
+    result = CliRunner().invoke(
+        reading_main,
+        ["asin:BOOK", str(tmp_path)],
+    )
+    assert result.exit_code == 0
+    output = json.loads(result.output)
+    assert output["key"] == "asin:BOOK"
+    assert output["title"] == "The Book Title"
+    assert output["device_sessions"][0]["start"] == "2024-01-01T10:00:00+00:00"
+    assert output["device_sessions"][0]["content_type"] == "E-Book Sample"
+    assert len(output["insights_sessions"]) == 1
+    assert len(output["whispersync_records"]) == 1
+    assert output["completion_records"][0]["completed_on"] == "2024-01-01"
