@@ -142,8 +142,28 @@ are also excluded from acquisition events. `BookAcquisition.acquired_sample` and
 `acquired_book` expose the first corresponding events; `--acquisition` joins these
 values to CLI book output by `CanonicalKey`.
 
+## Reading record collection
+
+Reading reconstruction remains source-preserving in `reading.py`:
+
+```text
+DeviceReadingSessionRecord ─────┐
+ReadingInsightsSessionRecord ───┤
+WhispersyncRecord ──────────────┤
+ReadingActionContainerRecord ───┼─> BookReading (grouped by CanonicalKey)
+ReadingActionWidgetRecord ──────┤
+AutoMarkAsReadRecord ───────────┤
+TitleCompletionRecord ──────────┘
+```
+
+`BookReading` has one list per source record type. It does not yet expose a canonical
+activity/session schema, match duplicate Device and Reading Insights sessions, join
+adjacent sessions, or select a preferred duration. Source content types retain
+sample/full provenance. Whispersync PDOC rows join through exact document IDs; rows
+without an ASIN or exact personal-document ID are omitted. Reading Insights day units
+are also omitted because they have no book identifier.
+
 ## Deliberately separate activity
 
-Reading sessions, Reading Insights, Whispersync annotations/state, completion events,
-content updates, and device activity are not joined into `BookCanonical`. They are
-event or device entities referencing logical content, not intrinsic book metadata.
+`BookReading`, acquisitions, content updates, and device activity are not joined into
+`BookCanonical`. They reference logical content but are not intrinsic book metadata.

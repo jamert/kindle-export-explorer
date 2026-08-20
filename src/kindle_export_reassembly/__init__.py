@@ -24,6 +24,17 @@ from .books import (
     Series,
     reconstruct_books,
 )
+from .reading import (
+    AutoMarkAsReadRecord,
+    BookReading,
+    DeviceReadingSessionRecord,
+    ReadingActionContainerRecord,
+    ReadingActionWidgetRecord,
+    ReadingInsightsSessionRecord,
+    TitleCompletionRecord,
+    WhispersyncRecord,
+    reconstruct_reading,
+)
 
 
 __all__ = [
@@ -31,11 +42,14 @@ __all__ = [
     "AcquisitionEvent",
     "AcquisitionEventType",
     "Authors",
+    "AutoMarkAsReadRecord",
     "BookAcquisition",
     "BookCanonical",
     "BookMetadata",
+    "BookReading",
     "CanonicalizationService",
     "CanonicalKey",
+    "DeviceReadingSessionRecord",
     "DigitalOwnership",
     "DocumentAcquisitionRecord",
     "DocumentRecord",
@@ -44,7 +58,13 @@ __all__ = [
     "KindleBookRecord",
     "PrintAcquisitionRecord",
     "PrintBookRecord",
+    "ReadingActionContainerRecord",
+    "ReadingActionWidgetRecord",
+    "ReadingInsightsSessionRecord",
     "Series",
+    "TitleCompletionRecord",
+    "WhispersyncRecord",
     "reconstruct_acquisitions",
     "reconstruct_books",
+    "reconstruct_reading",
 ]

@@ -1,8 +1,8 @@
 # kindle-export-reassembly
 
 Reconstruct canonical book records from an Amazon Kindle data export. Source rows are
-joined first, then resolved into the `BookCanonical` schema. Reading sessions,
-progress, annotations, synchronization, and other activity are not included.
+joined first, then resolved into the `BookCanonical` schema. Acquisition and reading
+records are available through separate Python APIs.
 
 ## Run
 
@@ -96,6 +96,22 @@ uv run kindle-books --acquisition /path/to/Kindle > books-with-acquisition.tsv
 
 The additional fields are `acquired_sample` and `acquired_book`. Missing timestamps
 are empty TSV cells or JSON `null` values.
+
+## Reading records
+
+The Python API collects source-specific reading records by canonical key without
+attempting to merge them into canonical sessions:
+
+```python
+from kindle_export_reassembly import reconstruct_reading
+
+reading = reconstruct_reading(export_directory)
+```
+
+Each `BookReading` has separate lists for device sessions, Reading Insights sessions,
+Whispersync records, reading-action containers and widgets, automatic mark-as-read
+records, and title-completion records. Sample/full provenance remains on each source
+record. Records without an ASIN or an exact personal-document ID are omitted.
 
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
