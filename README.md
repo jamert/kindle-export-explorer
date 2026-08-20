@@ -88,6 +88,15 @@ default-content events; ULI `Relationship Creation Date` supplies the best avail
 print-acquisition timestamp; personal documents use `EntryCreationDate`. Content
 consumption/download records are deliberately ignored.
 
+Add the derived timestamps to TSV or JSONL book output with `--acquisition`:
+
+```console
+uv run kindle-books --acquisition /path/to/Kindle > books-with-acquisition.tsv
+```
+
+The additional fields are `acquired_sample` and `acquired_book`. Missing timestamps
+are empty TSV cells or JSON `null` values.
+
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.

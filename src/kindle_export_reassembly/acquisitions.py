@@ -45,11 +45,11 @@ class BookAcquisition:
         )
 
     @property
-    def sample_acquired(self) -> datetime | None:
+    def acquired_sample(self) -> datetime | None:
         return self._first_timestamp(AcquisitionEventType.SAMPLE_ACQUIRED)
 
     @property
-    def book_acquired(self) -> datetime | None:
+    def acquired_book(self) -> datetime | None:
         return self._first_timestamp(
             AcquisitionEventType.KINDLE_PURCHASED,
             AcquisitionEventType.KINDLE_DEFAULT_ACQUIRED,

@@ -9,16 +9,19 @@ from pathlib import Path
 
 import click
 
+from .acquisitions import BookAcquisition, reconstruct_acquisitions
 from .books import (
     EXTRA_HEADERS,
     HEADERS,
     BookCanonical,
+    CanonicalKey,
     ExportError,
     reconstruct_books,
 )
 
 
 _IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"
+_ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 
 
 # Command overview
@@ -41,6 +44,11 @@ _IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"
     "--extra",
     is_flag=True,
     help="Include series, genres, and book/series links.",
+)
+@click.option(
+    "--acquisition",
+    is_flag=True,
+    help="Include sample and book acquisition timestamps.",
 )
 @click.option(
     "--jsonl",
@@ -69,6 +77,7 @@ def main(
     show_samples: bool,
     source: str,
     extra: bool,
+    acquisition: bool,
     json_lines: bool,
     include: str | None,
     exclude: str | None,
@@ -85,15 +94,23 @@ def main(
             show_samples=True if requested_ids is not None else show_samples,
             source="all" if requested_ids is not None else source,
         )
+        acquisition_by_key = (
+            {
+                item.key: item
+                for item in reconstruct_acquisitions(export_directory)
+            }
+            if acquisition
+            else None
+        )
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
     excluded_ids = _parse_identifiers(exclude, "--exclude")
     books = _select_books(books, requested_ids, excluded_ids)
     if json_lines:
-        _write_json_lines(books, extra)
+        _write_json_lines(books, extra, acquisition_by_key)
     else:
-        _write_tsv(books, extra)
+        _write_tsv(books, extra, acquisition_by_key)
 
 
 # CLI implementation details
@@ -134,15 +151,43 @@ def _select_books(
     return selected
 
 
-def _write_json_lines(books: list[BookCanonical], extra: bool) -> None:
+def _write_json_lines(
+    books: list[BookCanonical],
+    extra: bool,
+    acquisition_by_key: dict[CanonicalKey, BookAcquisition] | None,
+) -> None:
     for book in books:
-        click.echo(json.dumps(book.as_dict(extra=extra), ensure_ascii=False))
+        record = book.as_dict(extra=extra)
+        if acquisition_by_key is not None:
+            record.update(_acquisition_values(acquisition_by_key.get(book.key)))
+        click.echo(json.dumps(record, ensure_ascii=False))
 
 
-def _write_tsv(books: list[BookCanonical], extra: bool) -> None:
+def _write_tsv(
+    books: list[BookCanonical],
+    extra: bool,
+    acquisition_by_key: dict[CanonicalKey, BookAcquisition] | None,
+) -> None:
     writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
-    writer.writerow([*HEADERS, *(EXTRA_HEADERS if extra else [])])
-    writer.writerows(book.as_row(extra=extra) for book in books)
+    acquisition_headers = _ACQUISITION_HEADERS if acquisition_by_key is not None else ()
+    writer.writerow([*HEADERS, *(EXTRA_HEADERS if extra else []), *acquisition_headers])
+    for book in books:
+        row = book.as_row(extra=extra)
+        if acquisition_by_key is not None:
+            values = _acquisition_values(acquisition_by_key.get(book.key))
+            row.extend(values[header] or "" for header in _ACQUISITION_HEADERS)
+        writer.writerow(row)
+
+
+def _acquisition_values(
+    acquisition: BookAcquisition | None,
+) -> dict[str, str | None]:
+    acquired_sample = acquisition.acquired_sample if acquisition else None
+    acquired_book = acquisition.acquired_book if acquisition else None
+    return {
+        "acquired_sample": acquired_sample.isoformat() if acquired_sample else None,
+        "acquired_book": acquired_book.isoformat() if acquired_book else None,
+    }
 
 
 __all__ = ["main"]

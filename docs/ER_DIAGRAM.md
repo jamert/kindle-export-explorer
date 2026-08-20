@@ -138,7 +138,9 @@ DocumentAcquisitionRecord┘
 The print timestamp indicates when ULI ownership was recorded; it is not guaranteed to
 be the retail transaction time. CustomerOrders has order identifiers but no timestamp,
 so it is not used. Digital Ownership content-consumption dates describe downloads and
-are also excluded from acquisition events.
+are also excluded from acquisition events. `BookAcquisition.acquired_sample` and
+`acquired_book` expose the first corresponding events; `--acquisition` joins these
+values to CLI book output by `CanonicalKey`.
 
 ## Deliberately separate activity
 

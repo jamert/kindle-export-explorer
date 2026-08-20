@@ -3,6 +3,8 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
+from click.testing import CliRunner
+
 from kindle_export_reassembly import (
     AcquisitionEvent,
     AcquisitionEventType,
@@ -10,6 +12,7 @@ from kindle_export_reassembly import (
     CanonicalKey,
     reconstruct_acquisitions,
 )
+from kindle_export_reassembly.cli import main
 
 
 def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
@@ -99,10 +102,10 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
         datetime(2024, 1, 3, 12, tzinfo=timezone.utc),
     ]
-    assert by_key["asin:BOOK"].sample_acquired == datetime(
+    assert by_key["asin:BOOK"].acquired_sample == datetime(
         2024, 1, 1, 10, tzinfo=timezone.utc
     )
-    assert by_key["asin:BOOK"].book_acquired == datetime(
+    assert by_key["asin:BOOK"].acquired_book == datetime(
         2024, 1, 3, 12, tzinfo=timezone.utc
     )
     assert by_key["asin:PRINT"].events[0].type == (
@@ -111,8 +114,8 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
     assert by_key["asin:PRINT"].events[0].timestamp == datetime(
         2023, 2, 1, 9, tzinfo=timezone.utc
     )
-    assert by_key["asin:PRINT"].sample_acquired is None
-    assert by_key["asin:PRINT"].book_acquired == datetime(
+    assert by_key["asin:PRINT"].acquired_sample is None
+    assert by_key["asin:PRINT"].acquired_book == datetime(
         2023, 2, 1, 9, tzinfo=timezone.utc
     )
     assert by_key["document:DOC"].events[0].type == (
@@ -121,6 +124,41 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
     assert all(
         event.timestamp != datetime(2024, 1, 1, 10, 5, tzinfo=timezone.utc)
         for event in by_key["asin:BOOK"].events
+    )
+
+    runner = CliRunner()
+    tsv_result = runner.invoke(
+        main,
+        ["--acquisition", "--source", "all", str(tmp_path)],
+    )
+    assert tsv_result.exit_code == 0
+    tsv_rows = {
+        row["key"]: row
+        for row in csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab")
+    }
+    assert tsv_rows["asin:BOOK"]["acquired_sample"] == (
+        "2024-01-01T10:00:00+00:00"
+    )
+    assert tsv_rows["asin:BOOK"]["acquired_book"] == (
+        "2024-01-03T12:00:00+00:00"
+    )
+    assert tsv_rows["asin:PRINT"]["acquired_sample"] == ""
+    assert tsv_rows["asin:PRINT"]["acquired_book"] == (
+        "2023-02-01T09:00:00+00:00"
+    )
+
+    json_result = runner.invoke(
+        main,
+        ["--acquisition", "--jsonl", "--source", "all", str(tmp_path)],
+    )
+    assert json_result.exit_code == 0
+    json_rows = {
+        row["key"]: row
+        for row in map(json.loads, json_result.output.splitlines())
+    }
+    assert json_rows["document:DOC"]["acquired_sample"] is None
+    assert json_rows["document:DOC"]["acquired_book"] == (
+        "2022-03-04T05:06:07+00:00"
     )
 
 
@@ -142,8 +180,8 @@ def test_acquisition_properties_do_not_depend_on_event_order() -> None:
         early_purchase,
         late_purchase,
     ]
-    assert acquisition.sample_acquired == early_sample
-    assert acquisition.book_acquired == early_purchase
+    assert acquisition.acquired_sample == early_sample
+    assert acquisition.acquired_book == early_purchase
 
 
 def test_reconstructs_default_kindle_acquisition(tmp_path: Path) -> None:
