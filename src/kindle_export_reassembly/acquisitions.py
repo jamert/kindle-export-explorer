@@ -34,6 +34,42 @@ class BookAcquisition:
     key: CanonicalKey
     events: list[AcquisitionEvent]
 
+    def __post_init__(self) -> None:
+        object.__setattr__(
+            self,
+            "events",
+            sorted(
+                self.events,
+                key=lambda event: (event.timestamp, event.type.value),
+            ),
+        )
+
+    @property
+    def sample_acquired(self) -> datetime | None:
+        return self._first_timestamp(AcquisitionEventType.SAMPLE_ACQUIRED)
+
+    @property
+    def book_acquired(self) -> datetime | None:
+        return self._first_timestamp(
+            AcquisitionEventType.KINDLE_PURCHASED,
+            AcquisitionEventType.KINDLE_DEFAULT_ACQUIRED,
+            AcquisitionEventType.PRINT_ACQUIRED,
+            AcquisitionEventType.DOCUMENT_CREATED,
+        )
+
+    def _first_timestamp(
+        self,
+        *event_types: AcquisitionEventType,
+    ) -> datetime | None:
+        return next(
+            (
+                event.timestamp
+                for event in self.events
+                if event.type in event_types
+            ),
+            None,
+        )
+
 
 # Public reconstruction pipeline
 
@@ -98,7 +134,7 @@ class AcquisitionCanonicalizationService:
             for record in records
             if record.timestamp is not None
         }
-        return sorted(events, key=lambda event: (event.timestamp, event.type.value))
+        return list(events)
 
 
 # Ownership-specific source records

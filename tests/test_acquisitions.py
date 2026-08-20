@@ -3,7 +3,13 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from kindle_export_reassembly import AcquisitionEventType, reconstruct_acquisitions
+from kindle_export_reassembly import (
+    AcquisitionEvent,
+    AcquisitionEventType,
+    BookAcquisition,
+    CanonicalKey,
+    reconstruct_acquisitions,
+)
 
 
 def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
@@ -93,10 +99,20 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
         datetime(2024, 1, 3, 12, tzinfo=timezone.utc),
     ]
+    assert by_key["asin:BOOK"].sample_acquired == datetime(
+        2024, 1, 1, 10, tzinfo=timezone.utc
+    )
+    assert by_key["asin:BOOK"].book_acquired == datetime(
+        2024, 1, 3, 12, tzinfo=timezone.utc
+    )
     assert by_key["asin:PRINT"].events[0].type == (
         AcquisitionEventType.PRINT_ACQUIRED
     )
     assert by_key["asin:PRINT"].events[0].timestamp == datetime(
+        2023, 2, 1, 9, tzinfo=timezone.utc
+    )
+    assert by_key["asin:PRINT"].sample_acquired is None
+    assert by_key["asin:PRINT"].book_acquired == datetime(
         2023, 2, 1, 9, tzinfo=timezone.utc
     )
     assert by_key["document:DOC"].events[0].type == (
@@ -106,6 +122,28 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         event.timestamp != datetime(2024, 1, 1, 10, 5, tzinfo=timezone.utc)
         for event in by_key["asin:BOOK"].events
     )
+
+
+def test_acquisition_properties_do_not_depend_on_event_order() -> None:
+    early_sample = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    early_purchase = datetime(2024, 1, 2, tzinfo=timezone.utc)
+    late_purchase = datetime(2024, 1, 3, tzinfo=timezone.utc)
+    acquisition = BookAcquisition(
+        key=CanonicalKey(asin="BOOK"),
+        events=[
+            AcquisitionEvent(AcquisitionEventType.KINDLE_PURCHASED, late_purchase),
+            AcquisitionEvent(AcquisitionEventType.SAMPLE_ACQUIRED, early_sample),
+            AcquisitionEvent(AcquisitionEventType.KINDLE_PURCHASED, early_purchase),
+        ],
+    )
+
+    assert [event.timestamp for event in acquisition.events] == [
+        early_sample,
+        early_purchase,
+        late_purchase,
+    ]
+    assert acquisition.sample_acquired == early_sample
+    assert acquisition.book_acquired == early_purchase
 
 
 def test_reconstructs_default_kindle_acquisition(tmp_path: Path) -> None:
