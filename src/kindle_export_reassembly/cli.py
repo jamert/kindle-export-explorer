@@ -19,6 +19,7 @@ from .books import (
     reconstruct_books,
 )
 from .cli_utils import parse_identifiers, select_books
+from .formatting import format_datetime
 
 
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
@@ -149,8 +150,8 @@ def _acquisition_values(
     acquired_sample = acquisition.acquired_sample if acquisition else None
     acquired_book = acquisition.acquired_book if acquisition else None
     return {
-        "acquired_sample": acquired_sample.isoformat() if acquired_sample else None,
-        "acquired_book": acquired_book.isoformat() if acquired_book else None,
+        "acquired_sample": format_datetime(acquired_sample) if acquired_sample else None,
+        "acquired_book": format_datetime(acquired_book) if acquired_book else None,
     }
 
 

@@ -4,13 +4,14 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, fields
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import click
 
 from .books import CanonicalKey, ExportError, reconstruct_books
+from .formatting import format_datetime
 from .reading import BookReading, reconstruct_reading
 
 
@@ -107,6 +108,8 @@ def _reading_as_dict(reading: BookReading, title: str | None) -> dict[str, Any]:
 
 
 def _json_default(value: object) -> str:
+    if isinstance(value, datetime):
+        return format_datetime(value)
     if isinstance(value, date):
         return value.isoformat()
     raise TypeError(f"cannot serialize {type(value).__name__}")

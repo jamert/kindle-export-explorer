@@ -14,6 +14,7 @@ import click
 from .acquisitions import BookAcquisition, reconstruct_acquisitions
 from .books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstruct_books
 from .cli_utils import parse_identifiers, select_books
+from .formatting import format_datetime
 from .reading import BookReading, reconstruct_reading
 
 
@@ -149,7 +150,7 @@ def _acquisition_sort_key(
 
 
 def _timestamp(value: datetime | None) -> str | None:
-    return value.isoformat() if value else None
+    return format_datetime(value) if value else None
 
 
 __all__ = ["main"]

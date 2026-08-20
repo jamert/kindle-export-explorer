@@ -137,14 +137,14 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         for row in csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab")
     }
     assert tsv_rows["asin:BOOK"]["acquired_sample"] == (
-        "2024-01-01T10:00:00+00:00"
+        "2024-01-01T10:00:00Z"
     )
     assert tsv_rows["asin:BOOK"]["acquired_book"] == (
-        "2024-01-03T12:00:00+00:00"
+        "2024-01-03T12:00:00Z"
     )
     assert tsv_rows["asin:PRINT"]["acquired_sample"] == ""
     assert tsv_rows["asin:PRINT"]["acquired_book"] == (
-        "2023-02-01T09:00:00+00:00"
+        "2023-02-01T09:00:00Z"
     )
 
     json_result = runner.invoke(
@@ -158,7 +158,7 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
     }
     assert json_rows["document:DOC"]["acquired_sample"] is None
     assert json_rows["document:DOC"]["acquired_book"] == (
-        "2022-03-04T05:06:07+00:00"
+        "2022-03-04T05:06:07Z"
     )
 
 

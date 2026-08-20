@@ -268,11 +268,11 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     output = json.loads(result.output)
     assert output["key"] == "asin:BOOK"
     assert output["title"] == "The Book Title"
-    assert output["device_sessions"][0]["start"] == "2024-01-01T10:00:00+00:00"
+    assert output["device_sessions"][0]["start"] == "2024-01-01T10:00:00Z"
     assert output["device_sessions"][0]["content_type"] == "E-Book Sample"
     assert output["device_sessions_summary"] == {
-        "start": "2024-01-01T10:00:00+00:00",
-        "end": "2024-01-01T10:07:00+00:00",
+        "start": "2024-01-01T10:00:00Z",
+        "end": "2024-01-01T10:07:00Z",
         "total_reading_millis": 299500,
         "total_reading_humanized": "5m",
         "total_page_flips": 12,
@@ -303,12 +303,12 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
         csv.DictReader(overview_result.output.splitlines(), dialect="excel-tab")
     )
     assert [row["key"] for row in overview_rows] == ["asin:SAMPLE", "asin:BOOK"]
-    assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00+00:00"
+    assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00Z"
     assert overview_rows[0]["acquired_book"] == ""
     assert overview_rows[0]["total_reading_humanized"] == "0m"
-    assert overview_rows[1]["acquired_book"] == "2024-01-02T00:00:00+00:00"
-    assert overview_rows[1]["reading_start"] == "2024-01-01T10:00:00+00:00"
-    assert overview_rows[1]["reading_end"] == "2024-01-01T10:07:00+00:00"
+    assert overview_rows[1]["acquired_book"] == "2024-01-02T00:00:00Z"
+    assert overview_rows[1]["reading_start"] == "2024-01-01T10:00:00Z"
+    assert overview_rows[1]["reading_end"] == "2024-01-01T10:07:00Z"
     assert overview_rows[1]["total_reading_humanized"] == "5m"
 
     overview_json_result = CliRunner().invoke(
@@ -326,5 +326,5 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     overview_json = json.loads(overview_json_result.output)
     assert overview_json["key"] == "asin:BOOK"
     assert overview_json["acquired_sample"] is None
-    assert overview_json["acquired_book"] == "2024-01-02T00:00:00+00:00"
+    assert overview_json["acquired_book"] == "2024-01-02T00:00:00Z"
     assert overview_json["total_reading_humanized"] == "5m"
