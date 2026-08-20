@@ -20,8 +20,8 @@ key  asin  document_id  title  author  ownership_digital  ownership_print
 or `personal_document`. `ownership_print` is true only for a Unified Library Index
 ownership record without digital-ownership evidence.
 
-Use `--extra` to add series title, series ASIN, series position, genres, and a
-marketplace product link:
+Use `--extra` to add series title, series ASIN, series position, genres, and
+marketplace-derived links for the book and its series:
 
 ```console
 uv run kindle-books --extra /path/to/Kindle > books-extra.tsv

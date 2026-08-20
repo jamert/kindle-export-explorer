@@ -122,6 +122,12 @@ class BookCanonical:
             return f"https://{self.marketplace}/dp/{self.key.asin}"
         return None
 
+    @property
+    def series_link(self) -> str | None:
+        if self.marketplace and self.series and self.series.asin:
+            return f"https://{self.marketplace}/dp/{self.series.asin}"
+        return None
+
     def as_dict(self, *, extra: bool = False) -> dict[str, object]:
         result: dict[str, object] = {
             "key": str(self.key),
@@ -146,6 +152,7 @@ class BookCanonical:
                     ),
                     "genres": self.genres,
                     "link": self.link,
+                    "series_link": self.series_link,
                 }
             )
         return result
@@ -172,6 +179,7 @@ class BookCanonical:
                     ),
                     _joined(self.genres),
                     self.link or "",
+                    self.series_link or "",
                 )
             )
         return row
@@ -275,6 +283,7 @@ EXTRA_HEADERS = [
     "series_position",
     "genres",
     "link",
+    "series_link",
 ]
 
 

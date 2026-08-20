@@ -367,6 +367,7 @@ def test_extra_adds_series_genres_and_link(tmp_path: Path) -> None:
     assert row["genres"] == "History"
     assert "marketplace" not in row
     assert row["link"] == "https://www.amazon.com/dp/PRINT"
+    assert row["series_link"] == "https://www.amazon.com/dp/SERIES-1"
 
     removed_raw = runner.invoke(main, ["--raw", str(tmp_path)])
     assert removed_raw.exit_code != 0
@@ -417,6 +418,7 @@ def test_canonical_uses_sortable_author_only_as_fallback(
     assert row["author"] == "Writer, Ada"
     assert "marketplace" not in row
     assert row["link"] == "https://www.amazon.com/dp/PRINT"
+    assert row["series_link"] == ""
     assert "multiple marketplaces" in result.stderr
     assert "using www.amazon.com" in result.stderr
 
@@ -542,6 +544,7 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
         assert record["series"] is None
         assert record["genres"] == []
         assert record["link"] is None
+        assert record["series_link"] is None
 
 
 def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:

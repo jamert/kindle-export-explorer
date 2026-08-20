@@ -35,12 +35,13 @@ flowchart LR
 - `genres: list[str]`
 - `marketplace: str`
 - computed `link: str | None` (`https://{marketplace}/dp/{asin}`)
+- computed `series_link: str | None` (`https://{marketplace}/dp/{series.asin}`)
 
 The default CLI output contains the formatted key, its nullable ASIN and document-ID
 components, title, author, digital ownership, and print ownership. Sample status is
 represented by `ownership_digital`, not by the canonical key or a separate output
-field. `--extra` adds series, genres, and the computed product link. Marketplace is
-retained internally only to construct the link. JSONL
+field. `--extra` adds series, genres, and computed book and series links. Marketplace
+is retained internally only to construct those links. JSONL
 emits `series: null` when no series metadata exists; nullable series components remain
 empty TSV cells.
 
