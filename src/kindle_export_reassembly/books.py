@@ -24,44 +24,7 @@ class ExportError(ValueError):
     """Raised when a directory is not a recognizable Kindle export."""
 
 
-def clean(value: object) -> str:
-    if value is None:
-        return ""
-    result = str(value).strip()
-    return "" if result.casefold() in _MISSING else result
-
-
-def parse_series_position(value: object) -> int | None:
-    result = clean(value)
-    if not result:
-        return None
-    try:
-        return int(result)
-    except ValueError:
-        return None
-
-
-def clean_item_asin(value: object) -> str:
-    result = clean(value)
-    prefix = "urn:collection:1:asin-"
-    if result.casefold().startswith(prefix):
-        return result[len(prefix) :]
-    return result
-
-
-def is_default_personal_document(values: Mapping[str, object]) -> bool:
-    """Identify Amazon's Cloud Drive notice without relying on an account ID."""
-    provider = clean(values.get("DocumentProvider")).casefold()
-    filename = Path(clean(values.get("Filename"))).name.casefold()
-    return (
-        provider == "amazon cloud drive"
-        and filename == "notice from amazon cloud drive.docx"
-    )
-
-
-def _joined(values: Iterable[str]) -> str:
-    return "; ".join(sorted(values, key=str.casefold))
-
+# Canonical output model
 
 @dataclass(frozen=True)
 class CanonicalKey:
@@ -185,6 +148,181 @@ class BookCanonical:
         return row
 
 
+HEADERS = [
+    "key",
+    "asin",
+    "document_id",
+    "title",
+    "author",
+    "ownership_digital",
+    "ownership_print",
+]
+EXTRA_HEADERS = [
+    "series_title",
+    "series_asin",
+    "series_position",
+    "genres",
+    "link",
+    "series_link",
+]
+
+
+# Public reconstruction pipeline
+
+def reconstruct_books(
+    root: Path,
+    *,
+    show_default: bool = False,
+    show_samples: bool = False,
+    source: str = "kindle",
+) -> list[BookCanonical]:
+    """Join source records and return canonical books found under *root*.
+
+    ``source`` selects Kindle content, print books, or ``all``. Samples are omitted
+    unless ``show_samples`` is true. Kindle-supplied dictionaries and user guides
+    are omitted unless ``show_default`` is true. Activity fields (reading dates,
+    progress, sessions, annotations, and account state) are deliberately not copied.
+    """
+    if source not in {"kindle", "print", "all"}:
+        raise ValueError(f"invalid source: {source}")
+    root = root.expanduser()
+    if not root.is_dir():
+        raise ExportError(f"not a directory: {root}")
+
+    catalog = _assemble_source_records(root)
+    return _canonicalize_records(
+        catalog,
+        show_default=show_default,
+        show_samples=show_samples,
+        source=source,
+    )
+
+
+# Canonical conversion
+
+class CanonicalizationService:
+    """Convert ownership-specific source records into canonical books."""
+
+    @staticmethod
+    def convert_kindle(*records: KindleBookRecord) -> list[BookCanonical]:
+        if not records:
+            return []
+        asin = records[0].asin
+        full_record = next((record for record in records if not record.sample), None)
+        if full_record is not None:
+            ownership = (
+                DigitalOwnership.DEFAULT
+                if full_record.default
+                else DigitalOwnership.KINDLE_EBOOK
+            )
+        else:
+            ownership = (
+                DigitalOwnership.DEFAULT
+                if any(record.default for record in records)
+                else DigitalOwnership.KINDLE_SAMPLE
+            )
+        return [
+            CanonicalizationService._convert_metadata(
+                CanonicalizationService._merge_kindle_metadata(*records),
+                CanonicalKey(asin=asin),
+                ownership,
+                False,
+            )
+        ]
+
+    @staticmethod
+    def convert_print(record: PrintBookRecord) -> BookCanonical:
+        return CanonicalizationService._convert_metadata(
+            record.metadata,
+            CanonicalKey(asin=record.asin),
+            DigitalOwnership.UNKNOWN,
+            True,
+        )
+
+    @staticmethod
+    def convert_document(record: DocumentRecord) -> BookCanonical:
+        ownership = (
+            DigitalOwnership.DEFAULT
+            if record.default
+            else DigitalOwnership.PERSONAL_DOCUMENT
+        )
+        names = [record.provider] if record.provider else []
+        return BookCanonical(
+            key=CanonicalKey(document_id=record.document_id),
+            title=record.title,
+            authors=Authors(names=names, asins=[]),
+            ownership_digital=ownership,
+            ownership_print=False,
+            series=None,
+            genres=[],
+            marketplace="",
+        )
+
+    @staticmethod
+    def _convert_metadata(
+        metadata: BookMetadata,
+        key: CanonicalKey,
+        digital: DigitalOwnership,
+        print_owned: bool,
+    ) -> BookCanonical:
+        names = list(metadata.authors)
+        if not names and metadata.sortable_author:
+            names.append(metadata.sortable_author)
+        series = (
+            Series(
+                title=metadata.series_title,
+                asin=metadata.series_asin,
+                position=metadata.series_position,
+            )
+            if metadata.series_title is not None
+            else None
+        )
+        return BookCanonical(
+            key=key,
+            title=metadata.sortable_title or metadata.title,
+            authors=Authors(
+                names=names,
+                asins=list(metadata.author_asins),
+            ),
+            ownership_digital=digital,
+            ownership_print=print_owned,
+            series=series,
+            genres=sorted(metadata.genres, key=str.casefold),
+            marketplace=_select_marketplace(str(key), metadata.marketplaces),
+        )
+
+    @staticmethod
+    def _merge_kindle_metadata(*records: KindleBookRecord) -> BookMetadata:
+        preferred = sorted(records, key=lambda record: record.sample)
+        merged = BookMetadata(
+            title=next(
+                (record.metadata.title for record in preferred if record.metadata.title),
+                "",
+            )
+        )
+        for record in preferred:
+            metadata = record.metadata
+            if merged.sortable_title is None and metadata.sortable_title is not None:
+                merged.sortable_title = metadata.sortable_title
+            if merged.sortable_author is None and metadata.sortable_author is not None:
+                merged.sortable_author = metadata.sortable_author
+            if merged.series_title is None and metadata.series_title is not None:
+                merged.series_title = metadata.series_title
+                merged.series_asin = metadata.series_asin
+                merged.series_position = metadata.series_position
+            for name in metadata.authors:
+                if name not in merged.authors:
+                    merged.authors.append(name)
+            for asin in metadata.author_asins:
+                if asin not in merged.author_asins:
+                    merged.author_asins.append(asin)
+            merged.genres.update(metadata.genres)
+            merged.marketplaces.update(metadata.marketplaces)
+        return merged
+
+
+# Ownership-specific source records
+
 @dataclass
 class BookMetadata:
     """Metadata shared by ASIN-based Kindle and print source records.
@@ -268,172 +406,7 @@ class DocumentRecord:
 AsinBookRecord = KindleBookRecord | PrintBookRecord
 
 
-HEADERS = [
-    "key",
-    "asin",
-    "document_id",
-    "title",
-    "author",
-    "ownership_digital",
-    "ownership_print",
-]
-EXTRA_HEADERS = [
-    "series_title",
-    "series_asin",
-    "series_position",
-    "genres",
-    "link",
-    "series_link",
-]
-
-
-def _marketplace_domain(value: str) -> str:
-    without_scheme = (
-        value.casefold().removeprefix("https://").removeprefix("http://")
-    )
-    return without_scheme.split("/", 1)[0]
-
-
-def _select_marketplace(key: str, values: set[str]) -> str:
-    if not values:
-        return ""
-    ordered = sorted(
-        values,
-        key=lambda value: (_marketplace_domain(value), value.casefold()),
-    )
-    preferred = next(
-        (value for value in ordered if _marketplace_domain(value).endswith("amazon.com")),
-        ordered[0],
-    )
-    if len(values) > 1:
-        alternatives = ", ".join(ordered)
-        print(
-            f"warning: {key} has multiple marketplaces ({alternatives}); using {preferred}",
-            file=sys.stderr,
-        )
-    return preferred
-
-
-class CanonicalizationService:
-    """Convert ownership-specific source records into canonical books."""
-
-    @staticmethod
-    def _convert_metadata(
-        metadata: BookMetadata,
-        key: CanonicalKey,
-        digital: DigitalOwnership,
-        print_owned: bool,
-    ) -> BookCanonical:
-        names = list(metadata.authors)
-        if not names and metadata.sortable_author:
-            names.append(metadata.sortable_author)
-        series = (
-            Series(
-                title=metadata.series_title,
-                asin=metadata.series_asin,
-                position=metadata.series_position,
-            )
-            if metadata.series_title is not None
-            else None
-        )
-        return BookCanonical(
-            key=key,
-            title=metadata.sortable_title or metadata.title,
-            authors=Authors(
-                names=names,
-                asins=list(metadata.author_asins),
-            ),
-            ownership_digital=digital,
-            ownership_print=print_owned,
-            series=series,
-            genres=sorted(metadata.genres, key=str.casefold),
-            marketplace=_select_marketplace(str(key), metadata.marketplaces),
-        )
-
-    @staticmethod
-    def _merge_kindle_metadata(*records: KindleBookRecord) -> BookMetadata:
-        preferred = sorted(records, key=lambda record: record.sample)
-        merged = BookMetadata(
-            title=next(
-                (record.metadata.title for record in preferred if record.metadata.title),
-                "",
-            )
-        )
-        for record in preferred:
-            metadata = record.metadata
-            if merged.sortable_title is None and metadata.sortable_title is not None:
-                merged.sortable_title = metadata.sortable_title
-            if merged.sortable_author is None and metadata.sortable_author is not None:
-                merged.sortable_author = metadata.sortable_author
-            if merged.series_title is None and metadata.series_title is not None:
-                merged.series_title = metadata.series_title
-                merged.series_asin = metadata.series_asin
-                merged.series_position = metadata.series_position
-            for name in metadata.authors:
-                if name not in merged.authors:
-                    merged.authors.append(name)
-            for asin in metadata.author_asins:
-                if asin not in merged.author_asins:
-                    merged.author_asins.append(asin)
-            merged.genres.update(metadata.genres)
-            merged.marketplaces.update(metadata.marketplaces)
-        return merged
-
-    @staticmethod
-    def convert_kindle(*records: KindleBookRecord) -> list[BookCanonical]:
-        if not records:
-            return []
-        asin = records[0].asin
-        full_record = next((record for record in records if not record.sample), None)
-        if full_record is not None:
-            ownership = (
-                DigitalOwnership.DEFAULT
-                if full_record.default
-                else DigitalOwnership.KINDLE_EBOOK
-            )
-        else:
-            ownership = (
-                DigitalOwnership.DEFAULT
-                if any(record.default for record in records)
-                else DigitalOwnership.KINDLE_SAMPLE
-            )
-        return [
-            CanonicalizationService._convert_metadata(
-                CanonicalizationService._merge_kindle_metadata(*records),
-                CanonicalKey(asin=asin),
-                ownership,
-                False,
-            )
-        ]
-
-    @staticmethod
-    def convert_print(record: PrintBookRecord) -> BookCanonical:
-        return CanonicalizationService._convert_metadata(
-            record.metadata,
-            CanonicalKey(asin=record.asin),
-            DigitalOwnership.UNKNOWN,
-            True,
-        )
-
-    @staticmethod
-    def convert_document(record: DocumentRecord) -> BookCanonical:
-        ownership = (
-            DigitalOwnership.DEFAULT
-            if record.default
-            else DigitalOwnership.PERSONAL_DOCUMENT
-        )
-        names = [record.provider] if record.provider else []
-        return BookCanonical(
-            key=CanonicalKey(document_id=record.document_id),
-            title=record.title,
-            authors=Authors(names=names, asins=[]),
-            ownership_digital=ownership,
-            ownership_print=False,
-            series=None,
-            genres=[],
-            marketplace="",
-        )
-
+# Source record collection
 
 class SourceRecordCatalog:
     """Keep ownership-specific records separate and deduplicate by source key."""
@@ -517,6 +490,74 @@ class SourceRecordCatalog:
 
     def document_records(self) -> Iterable[DocumentRecord]:
         return self._documents.values()
+
+
+# Parsing and export-format details
+
+def clean(value: object) -> str:
+    if value is None:
+        return ""
+    result = str(value).strip()
+    return "" if result.casefold() in _MISSING else result
+
+
+def parse_series_position(value: object) -> int | None:
+    result = clean(value)
+    if not result:
+        return None
+    try:
+        return int(result)
+    except ValueError:
+        return None
+
+
+def clean_item_asin(value: object) -> str:
+    result = clean(value)
+    prefix = "urn:collection:1:asin-"
+    if result.casefold().startswith(prefix):
+        return result[len(prefix) :]
+    return result
+
+
+def is_default_personal_document(values: Mapping[str, object]) -> bool:
+    """Identify Amazon's Cloud Drive notice without relying on an account ID."""
+    provider = clean(values.get("DocumentProvider")).casefold()
+    filename = Path(clean(values.get("Filename"))).name.casefold()
+    return (
+        provider == "amazon cloud drive"
+        and filename == "notice from amazon cloud drive.docx"
+    )
+
+
+def _joined(values: Iterable[str]) -> str:
+    return "; ".join(sorted(values, key=str.casefold))
+
+
+def _marketplace_domain(value: str) -> str:
+    without_scheme = (
+        value.casefold().removeprefix("https://").removeprefix("http://")
+    )
+    return without_scheme.split("/", 1)[0]
+
+
+def _select_marketplace(key: str, values: set[str]) -> str:
+    if not values:
+        return ""
+    ordered = sorted(
+        values,
+        key=lambda value: (_marketplace_domain(value), value.casefold()),
+    )
+    preferred = next(
+        (value for value in ordered if _marketplace_domain(value).endswith("amazon.com")),
+        ordered[0],
+    )
+    if len(values) > 1:
+        alternatives = ", ".join(ordered)
+        print(
+            f"warning: {key} has multiple marketplaces ({alternatives}); using {preferred}",
+            file=sys.stderr,
+        )
+    return preferred
 
 
 def _clean_identifier(value: object) -> str:
@@ -616,26 +657,42 @@ class ExportFiles:
         ]
 
 
-def reconstruct_books(
-    root: Path,
+def _canonicalize_records(
+    catalog: SourceRecordCatalog,
     *,
-    show_default: bool = False,
-    show_samples: bool = False,
-    source: str = "kindle",
+    show_default: bool,
+    show_samples: bool,
+    source: str,
 ) -> list[BookCanonical]:
-    """Join source records and return canonical books found under *root*.
+    result: list[BookCanonical] = []
+    if source in {"kindle", "all"}:
+        for group in catalog.kindle_groups():
+            full_record = next(
+                (record for record in group if not record.sample),
+                None,
+            )
+            if full_record is not None:
+                if show_default or not full_record.default:
+                    result.extend(CanonicalizationService.convert_kindle(*group))
+            elif show_samples:
+                visible = tuple(
+                    record for record in group if show_default or not record.default
+                )
+                result.extend(CanonicalizationService.convert_kindle(*visible))
+        result.extend(
+            CanonicalizationService.convert_document(record)
+            for record in catalog.document_records()
+            if show_default or not record.default
+        )
+    if source in {"print", "all"}:
+        result.extend(
+            CanonicalizationService.convert_print(record)
+            for record in catalog.print_records()
+        )
+    return sorted(result, key=lambda book: (book.title.casefold(), str(book.key)))
 
-    ``source`` selects Kindle content, print books, or ``all``. Samples are omitted
-    unless ``show_samples`` is true. Kindle-supplied dictionaries and user guides
-    are omitted unless ``show_default`` is true. Activity fields (reading dates,
-    progress, sessions, annotations, and account state) are deliberately not copied.
-    """
-    if source not in {"kindle", "print", "all"}:
-        raise ValueError(f"invalid source: {source}")
-    root = root.expanduser()
-    if not root.is_dir():
-        raise ExportError(f"not a directory: {root}")
 
+def _assemble_source_records(root: Path) -> SourceRecordCatalog:
     catalog = SourceRecordCatalog()
     files = ExportFiles(root)
     recognized = False
@@ -783,30 +840,4 @@ def reconstruct_books(
 
     if not recognized:
         raise ExportError(f"no recognized Kindle export files found in {root}")
-
-    result: list[BookCanonical] = []
-    if source in {"kindle", "all"}:
-        for group in catalog.kindle_groups():
-            full_record = next(
-                (record for record in group if not record.sample),
-                None,
-            )
-            if full_record is not None:
-                if show_default or not full_record.default:
-                    result.extend(CanonicalizationService.convert_kindle(*group))
-            elif show_samples:
-                visible = tuple(
-                    record for record in group if show_default or not record.default
-                )
-                result.extend(CanonicalizationService.convert_kindle(*visible))
-        result.extend(
-            CanonicalizationService.convert_document(record)
-            for record in catalog.document_records()
-            if show_default or not record.default
-        )
-    if source in {"print", "all"}:
-        result.extend(
-            CanonicalizationService.convert_print(record)
-            for record in catalog.print_records()
-        )
-    return sorted(result, key=lambda book: (book.title.casefold(), str(book.key)))
+    return catalog

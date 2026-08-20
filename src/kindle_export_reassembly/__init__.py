@@ -30,52 +30,7 @@ from .books import (
 _IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"
 
 
-def _parse_identifiers(value: str | None, option: str) -> set[str] | None:
-    if value is None:
-        return None
-    identifiers = {
-        identifier.strip().casefold()
-        for identifier in value.split(",")
-        if identifier.strip()
-    }
-    if not identifiers:
-        raise click.BadParameter(_IDENTIFIER_ERROR, param_hint=option)
-    return identifiers
-
-
-def _book_identifiers(book: BookCanonical) -> set[str]:
-    return {
-        identifier.casefold()
-        for identifier in (str(book.key), book.asin, book.document_id)
-        if identifier
-    }
-
-
-def _select_books(
-    books: list[BookCanonical],
-    included: set[str] | None,
-    excluded: set[str] | None,
-) -> list[BookCanonical]:
-    selected = books
-    if included is not None:
-        selected = [book for book in selected if _book_identifiers(book) & included]
-    if excluded is not None:
-        selected = [
-            book for book in selected if not (_book_identifiers(book) & excluded)
-        ]
-    return selected
-
-
-def _write_json_lines(books: list[BookCanonical], extra: bool) -> None:
-    for book in books:
-        click.echo(json.dumps(book.as_dict(extra=extra), ensure_ascii=False))
-
-
-def _write_tsv(books: list[BookCanonical], extra: bool) -> None:
-    writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
-    writer.writerow([*HEADERS, *(EXTRA_HEADERS if extra else [])])
-    writer.writerows(book.as_row(extra=extra) for book in books)
-
+# Command overview
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
@@ -94,7 +49,7 @@ def _write_tsv(books: list[BookCanonical], extra: bool) -> None:
 @click.option(
     "--extra",
     is_flag=True,
-    help="Include series, genres, and marketplace fields.",
+    help="Include series, genres, and book/series links.",
 )
 @click.option(
     "--jsonl",
@@ -148,6 +103,55 @@ def main(
         _write_json_lines(books, extra)
     else:
         _write_tsv(books, extra)
+
+
+# CLI implementation details
+
+def _parse_identifiers(value: str | None, option: str) -> set[str] | None:
+    if value is None:
+        return None
+    identifiers = {
+        identifier.strip().casefold()
+        for identifier in value.split(",")
+        if identifier.strip()
+    }
+    if not identifiers:
+        raise click.BadParameter(_IDENTIFIER_ERROR, param_hint=option)
+    return identifiers
+
+
+def _book_identifiers(book: BookCanonical) -> set[str]:
+    return {
+        identifier.casefold()
+        for identifier in (str(book.key), book.asin, book.document_id)
+        if identifier
+    }
+
+
+def _select_books(
+    books: list[BookCanonical],
+    included: set[str] | None,
+    excluded: set[str] | None,
+) -> list[BookCanonical]:
+    selected = books
+    if included is not None:
+        selected = [book for book in selected if _book_identifiers(book) & included]
+    if excluded is not None:
+        selected = [
+            book for book in selected if not (_book_identifiers(book) & excluded)
+        ]
+    return selected
+
+
+def _write_json_lines(books: list[BookCanonical], extra: bool) -> None:
+    for book in books:
+        click.echo(json.dumps(book.as_dict(extra=extra), ensure_ascii=False))
+
+
+def _write_tsv(books: list[BookCanonical], extra: bool) -> None:
+    writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
+    writer.writerow([*HEADERS, *(EXTRA_HEADERS if extra else [])])
+    writer.writerows(book.as_row(extra=extra) for book in books)
 
 
 __all__ = [
