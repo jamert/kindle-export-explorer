@@ -11,9 +11,9 @@ from kindle_export_reassembly import (
     DocumentRecord,
     KindleBookRecord,
     PrintBookRecord,
-    main,
 )
 from kindle_export_reassembly.books import normalize_sharded_path, reconstruct_books
+from kindle_export_reassembly.cli import main
 
 
 def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:

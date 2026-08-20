@@ -9,8 +9,8 @@ dependencies = [
 ]
 
 [project.scripts]
-kindle-books = "kindle_export_reassembly:main"
-kindle-export-reassembly = "kindle_export_reassembly:main"
+kindle-books = "kindle_export_reassembly.cli:main"
+kindle-export-reassembly = "kindle_export_reassembly.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]
