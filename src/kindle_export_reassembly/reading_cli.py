@@ -14,6 +14,21 @@ from .books import CanonicalKey, ExportError, reconstruct_books
 from .reading import BookReading, reconstruct_reading
 
 
+_OMITTED_RECORD_FIELDS = {
+    "asin",
+    "device_family",
+    "device_serial_number",
+    "device_software_version",
+    "non_asin",
+    "personal_document_id",
+    "product_name",
+    "preferred_marketplace",
+    "purchased_marketplace",
+    "reading_marketplace",
+    "third_party_device",
+}
+
+
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("canonical_key")
 @click.argument(
@@ -79,7 +94,14 @@ def _reading_as_dict(reading: BookReading, title: str | None) -> dict[str, Any]:
     }
     for item in fields(reading):
         if item.name != "key":
-            result[item.name] = [asdict(record) for record in getattr(reading, item.name)]
+            result[item.name] = [
+                {
+                    name: value
+                    for name, value in asdict(record).items()
+                    if name not in _OMITTED_RECORD_FIELDS
+                }
+                for record in getattr(reading, item.name)
+            ]
     return result
 
 

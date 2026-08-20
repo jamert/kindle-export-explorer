@@ -151,7 +151,6 @@ DeviceReadingSessionRecord ─────┐
 ReadingInsightsSessionRecord ───┤
 WhispersyncRecord ──────────────┤
 ReadingActionContainerRecord ───┼─> BookReading (grouped by CanonicalKey)
-ReadingActionWidgetRecord ──────┤
 AutoMarkAsReadRecord ───────────┤
 TitleCompletionRecord ──────────┘
 ```
@@ -159,8 +158,13 @@ TitleCompletionRecord ──────────┘
 `BookReading` has one list per source record type. It does not yet expose a canonical
 activity/session schema, match duplicate Device and Reading Insights sessions, join
 adjacent sessions, or select a preferred duration. Source content types retain
-sample/full provenance. Whispersync PDOC rows join through exact document IDs; rows
-without an ASIN or exact personal-document ID are omitted. Reading Insights day units
+sample/full provenance. Only Whispersync `kindle.last_read` and
+`kindle.most_recent_read` records are retained. `kindle.continuous_read` is omitted
+because its ASIN and customer-modified timestamp always duplicate
+`kindle.most_recent_read` in this export. Annotations such as highlights, notes, and
+bookmarks are also omitted. See [WHISPERSYNC_RESEARCH.md](WHISPERSYNC_RESEARCH.md) for
+the supporting correlations and interpretation. Whispersync PDOC rows join through
+exact document IDs; rows without an ASIN or exact personal-document ID are omitted. Reading Insights day units
 are also omitted because they have no book identifier.
 
 ## Deliberately separate activity

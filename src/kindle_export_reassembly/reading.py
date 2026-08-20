@@ -22,9 +22,6 @@ class BookReading:
     reading_action_containers: list[ReadingActionContainerRecord] = field(
         default_factory=list
     )
-    reading_action_widgets: list[ReadingActionWidgetRecord] = field(
-        default_factory=list
-    )
     auto_mark_as_read_records: list[AutoMarkAsReadRecord] = field(
         default_factory=list
     )
@@ -83,12 +80,6 @@ class WhispersyncRecord:
     product_name: str
     device_serial_number: str
     third_party_device: str
-    format: str
-    is_deleted: bool
-    highlight: str
-    note: str
-    selection_type: str
-    version: str
 
 
 @dataclass(frozen=True)
@@ -100,17 +91,6 @@ class ReadingActionContainerRecord:
     reading_action_display: str
     entry_point: str
     book_format: str
-    country: str
-    device_family: str
-    preferred_marketplace: str
-
-
-@dataclass(frozen=True)
-class ReadingActionWidgetRecord:
-    asin: str
-    created_at: datetime | None
-    widget_action: str
-    widget_name: str
     country: str
     device_family: str
     preferred_marketplace: str
@@ -161,9 +141,6 @@ class ReadingSourceCatalog:
     ) -> None:
         self._for_asin(record.asin).reading_action_containers.append(record)
 
-    def add_reading_action_widget(self, record: ReadingActionWidgetRecord) -> None:
-        self._for_asin(record.asin).reading_action_widgets.append(record)
-
     def add_auto_mark_as_read(self, record: AutoMarkAsReadRecord) -> None:
         self._for_asin(record.asin).auto_mark_as_read_records.append(record)
 
@@ -181,6 +158,12 @@ class ReadingSourceCatalog:
 
 
 # Export parsing details
+
+_READING_ANNOTATION_TYPES = {
+    "kindle.last_read",
+    "kindle.most_recent_read",
+}
+
 
 def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
     catalog = ReadingSourceCatalog()
@@ -234,14 +217,15 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
     recognized |= bool(paths)
     for row in _csv_rows(paths):
         key = _whispersync_key(row)
-        if key is None:
+        annotation_type = clean(row.get("Annotation Type"))
+        if key is None or annotation_type not in _READING_ANNOTATION_TYPES:
             continue
         catalog.add_whispersync(
             key,
             WhispersyncRecord(
                 asin=clean(row.get("ASIN")),
                 non_asin=clean(row.get("Non ASIN")),
-                annotation_type=clean(row.get("Annotation Type")),
+                annotation_type=annotation_type,
                 content_type=clean(row.get("ContentType")),
                 creation_date=_parse_timestamp(row.get("Creation Date")),
                 customer_modified_date=_parse_timestamp(
@@ -251,12 +235,6 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
                 product_name=clean(row.get("Product Name")),
                 device_serial_number=clean(row.get("Device Serial Number")),
                 third_party_device=clean(row.get("Third Party Device")),
-                format=clean(row.get("Format")),
-                is_deleted=clean(row.get("Is Deleted")).casefold() == "yes",
-                highlight=clean(row.get("Highlight")),
-                note=clean(row.get("Note")),
-                selection_type=clean(row.get("Selection Type")),
-                version=clean(row.get("Version")),
             ),
         )
 
@@ -275,24 +253,6 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
                 reading_action_display=clean(row.get("reading_action_display")),
                 entry_point=clean(row.get("entry_point")),
                 book_format=clean(row.get("book_format")),
-                country=clean(row.get("country")),
-                device_family=clean(row.get("device_family")),
-                preferred_marketplace=clean(row.get("preferred_marketplace")),
-            )
-        )
-
-    paths = files.named("ReadingActionsWidgets")
-    recognized |= bool(paths)
-    for row in _csv_rows(paths):
-        asin = clean(row.get("ASIN"))
-        if not asin:
-            continue
-        catalog.add_reading_action_widget(
-            ReadingActionWidgetRecord(
-                asin=asin,
-                created_at=_parse_timestamp(row.get("created_timestamp")),
-                widget_action=clean(row.get("widget_action")),
-                widget_name=clean(row.get("widget_name")),
                 country=clean(row.get("country")),
                 device_family=clean(row.get("device_family")),
                 preferred_marketplace=clean(row.get("preferred_marketplace")),

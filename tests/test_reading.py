@@ -112,9 +112,19 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "No",
             ],
             [
+                "BOOK",
+                "",
+                "kindle.highlight",
+                "EBSP",
+                "2024-01-01T10:03:00Z",
+                "2024-01-01T10:03:01Z",
+                "2024-01-01T10:03:02Z",
+                "No",
+            ],
+            [
                 "",
                 "DOC-ID",
-                "kindle.continuous_read",
+                "kindle.most_recent_read",
                 "PDOC",
                 "2023-01-01T00:00:00Z",
                 "2023-01-02T00:00:00Z",
@@ -145,12 +155,6 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "Reach end of book",
             ]
         ],
-    )
-    write_csv(
-        tmp_path,
-        "Kindle.Devices.ReadingActionsWidgets/Kindle.Devices.ReadingActionsWidgets.csv",
-        ["ASIN", "created_timestamp", "widget_action", "widget_name"],
-        [["BOOK", "2024-01-01T10:05:04Z", "Open", "Buy This Book"]],
     )
     write_csv(
         tmp_path,
@@ -188,7 +192,6 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert book.whispersync_records[0].content_type == "EBSP"
     assert len(book.reading_action_containers) == 1
     assert book.reading_action_containers[0].entry_point == "Reach end of book"
-    assert len(book.reading_action_widgets) == 1
     assert len(book.auto_mark_as_read_records) == 1
     assert len(book.completion_records) == 1
     assert book.completion_records[0].completed_on == date(2024, 1, 1)
@@ -196,7 +199,6 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
 
     document = by_key["document:DOC-ID"]
     assert len(document.whispersync_records) == 1
-    assert document.whispersync_records[0].is_deleted is True
     assert not document.device_sessions
 
     result = CliRunner().invoke(
@@ -209,6 +211,20 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert output["title"] == "The Book Title"
     assert output["device_sessions"][0]["start"] == "2024-01-01T10:00:00+00:00"
     assert output["device_sessions"][0]["content_type"] == "E-Book Sample"
+    assert "asin" not in output["device_sessions"][0]
+    assert "preferred_marketplace" not in output["device_sessions"][0]
+    assert "purchased_marketplace" not in output["device_sessions"][0]
+    assert "device_family" not in output["device_sessions"][0]
+    assert "device_serial_number" not in output["device_sessions"][0]
+    assert "device_software_version" not in output["device_sessions"][0]
     assert len(output["insights_sessions"]) == 1
+    assert "asin" not in output["insights_sessions"][0]
+    assert "product_name" not in output["insights_sessions"][0]
+    assert "reading_marketplace" not in output["insights_sessions"][0]
     assert len(output["whispersync_records"]) == 1
+    assert "asin" not in output["whispersync_records"][0]
+    assert "non_asin" not in output["whispersync_records"][0]
+    assert "third_party_device" not in output["whispersync_records"][0]
     assert output["completion_records"][0]["completed_on"] == "2024-01-01"
+    assert "product_name" not in output["completion_records"][0]
+    assert "personal_document_id" not in output["completion_records"][0]

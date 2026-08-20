@@ -109,9 +109,13 @@ reading = reconstruct_reading(export_directory)
 ```
 
 Each `BookReading` has separate lists for device sessions, Reading Insights sessions,
-Whispersync records, reading-action containers and widgets, automatic mark-as-read
-records, and title-completion records. Sample/full provenance remains on each source
+Whispersync reading-position records, reading-action containers, automatic
+mark-as-read records, and title-completion records. Sample/full provenance remains on each source
 record. Records without an ASIN or an exact personal-document ID are omitted.
+Whispersync retains only `kindle.last_read` and `kindle.most_recent_read`.
+`kindle.continuous_read` is excluded because every one of its ASIN and
+customer-modified timestamp updates duplicates `kindle.most_recent_read` in the
+profiled export, so it contributes no additional observable reading evidence.
 
 Inspect one book's records as JSON with its canonical key. The command joins the
 canonical title from the ownership metadata:
@@ -128,7 +132,8 @@ The export directory is the directory containing folders such as
 Use `uv run kindle-books --help` for CLI help.
 
 See [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for source relationships and join
-rules.
+rules. [`docs/WHISPERSYNC_RESEARCH.md`](docs/WHISPERSYNC_RESEARCH.md) records the
+empirical interpretation of Whispersync reading state.
 
 ## Explore an export
 
