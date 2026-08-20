@@ -31,6 +31,16 @@ def clean(value: object) -> str:
     return "" if result.casefold() in _MISSING else result
 
 
+def parse_series_position(value: object) -> int | None:
+    result = clean(value)
+    if not result:
+        return None
+    try:
+        return int(result)
+    except ValueError:
+        return None
+
+
 def clean_item_asin(value: object) -> str:
     result = clean(value)
     prefix = "urn:collection:1:asin-"
@@ -84,7 +94,7 @@ class DigitalOwnership(StrEnum):
 class Series:
     title: str
     asin: str | None
-    position: str | None
+    position: int | None
 
 
 @dataclass(frozen=True)
@@ -155,7 +165,11 @@ class BookCanonical:
                 (
                     self.series.title if self.series else "",
                     (self.series.asin or "") if self.series else "",
-                    (self.series.position or "") if self.series else "",
+                    (
+                        str(self.series.position)
+                        if self.series and self.series.position is not None
+                        else ""
+                    ),
                     _joined(self.genres),
                     self.link or "",
                 )
@@ -167,11 +181,11 @@ class BookCanonical:
 class BookMetadata:
     """Metadata shared by ASIN-based Kindle and print source records.
 
-    Availability depends on the export relations connected to an ASIN. In the
-    observed export, every field is populated for at least one print record except
-    ``series_asin``: that value currently comes from Kindle Saga metadata and is
-    empty for all print records. It remains here because series identity belongs to
-    the shared canonical book schema rather than to ownership.
+    Availability depends on the export relations connected to an ASIN. Kindle Saga
+    supplies series title and ASIN separately, while the Unified Library Index often
+    encodes them together as ``<series title> <series ASIN>``. The ULI value is split
+    while source records are assembled so Kindle and print records share the same
+    metadata shape.
     """
 
     title: str
@@ -179,7 +193,7 @@ class BookMetadata:
     author_asins: list[str] = field(default_factory=list)
     genres: set[str] = field(default_factory=set)
     series_title: str | None = None
-    series_position: str | None = None
+    series_position: int | None = None
     series_asin: str | None = None
     sortable_title: str | None = None
     sortable_author: str | None = None
@@ -203,7 +217,7 @@ class BookMetadata:
         series_title = clean(title)
         if series_title and rank >= self._series_rank:
             self.series_title = series_title
-            self.series_position = clean(position) or None
+            self.series_position = parse_series_position(position)
             self.series_asin = clean(asin) or None
             self._series_rank = rank
 
@@ -501,8 +515,20 @@ def _clean_identifier(value: object) -> str:
     return "" if result.casefold() == "invalid-asin" else result
 
 
+_SERIES_TITLE_WITH_ASIN = re.compile(
+    r"^(?P<title>.+?)\s+(?P<asin>B[0-9A-Z]{9})$"
+)
 _NUMBERED_SHARD = re.compile(r"^(?P<base>.+)\.(?P<number>\d+)(?P<extension>\.[^.]+)$")
 _VERSIONED_DATASET = re.compile(r"^(?P<base>.+)\.\d+\.\d+$")
+
+
+def split_series_title_and_asin(value: object) -> tuple[str, str | None]:
+    """Split the ULI encoding ``<series title> <series ASIN>`` when present."""
+    title = clean(value)
+    match = _SERIES_TITLE_WITH_ASIN.fullmatch(title)
+    if match is None:
+        return title, None
+    return match.group("title"), match.group("asin")
 
 
 def _partitioned_dataset_path(path: Path) -> Path | None:
@@ -673,10 +699,14 @@ def reconstruct_books(
             marketplace = clean(row.get("Marketplace"))
             if marketplace:
                 metadata.marketplaces.add(marketplace)
+            series_title, series_asin = split_series_title_and_asin(
+                row.get("Series Title")
+            )
             metadata.set_series(
-                row.get("Series Title"),
+                series_title,
                 row.get("Position In Collection"),
                 10,
+                series_asin,
             )
 
     # BookRelation contains intrinsic item-to-series catalog relations. Its

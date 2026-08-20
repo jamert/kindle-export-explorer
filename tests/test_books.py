@@ -42,7 +42,7 @@ def test_canonicalization_service_keeps_source_record_types_separate() -> None:
     )
     printed = PrintBookRecord(
         asin="PRINT",
-        metadata=BookMetadata(title="Printed"),
+        metadata=BookMetadata(title="Printed", series_title="Series Without ASIN"),
     )
     document = DocumentRecord(
         document_id="DOC",
@@ -53,7 +53,11 @@ def test_canonicalization_service_keeps_source_record_types_separate() -> None:
     kindle = CanonicalizationService.convert_kindle(ebook, sample)
     assert [str(book.key) for book in kindle] == ["asin:BOOK"]
     assert kindle[0].ownership_digital == "kindle_ebook"
-    assert str(CanonicalizationService.convert_print(printed).key) == "asin:PRINT"
+    canonical_print = CanonicalizationService.convert_print(printed)
+    assert str(canonical_print.key) == "asin:PRINT"
+    assert canonical_print.series is not None
+    assert canonical_print.series.asin is None
+    assert canonical_print.series.position is None
     canonical_document = CanonicalizationService.convert_document(document)
     assert str(canonical_document.key) == "document:DOC"
     assert canonical_document.authors.names == ["Provider"]
@@ -110,7 +114,14 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
         "uli/CustomerRelationshipIndex.1.csv",
         ["ASIN", "Product Name", "Resource Type", "Ownership Type", "Series Title", "Position In Collection"],
         [
-            ["BOOK1", "A Book", "ITEM", "Item Owner", "A Series", "2"],
+            [
+                "BOOK1",
+                "A Book",
+                "ITEM",
+                "Item Owner",
+                "A Series B012345678",
+                "2",
+            ],
             ["WISH1", "A Wish", "ITEM", "Not Interested", "", ""],
         ],
     )
@@ -143,7 +154,8 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
     assert books[0].genres == ["History"]
     assert books[0].series is not None
     assert books[0].series.title == "A Series"
-    assert books[0].series.position == "2"
+    assert books[0].series.asin == "B012345678"
+    assert books[0].series.position == 2
 
 
 def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> None:

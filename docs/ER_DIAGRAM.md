@@ -30,8 +30,8 @@ flowchart LR
 - `authors: Authors`
 - `ownership_digital: DigitalOwnership`
 - `ownership_print: bool`
-- `series: Series | None`, where a present series has a required title and nullable
-  ASIN and position
+- `series: Series | None`, where a present series has a required title, nullable ASIN,
+  and nullable integer position
 - `genres: list[str]`
 - `marketplace: str`
 - computed `link: str | None` (`https://{marketplace}/dp/{asin}`)
@@ -82,9 +82,11 @@ represent simultaneous print and Kindle ownership under one ASIN.
   `Authors.names` and `Authors.asins` preserve the available author names and Amazon
   author-page ASINs as separate lists. They are deliberately unpaired because some
   authors have no Amazon page and the source provides no name-to-ID relationship.
-- **Series:** Saga `series-product-name`, `series-ASIN`, and item position; ULI Series
-  Title and Position are the fallback. The export has no explicit sortable series
-  title.
+- **Series:** Saga provides `series-product-name`, `series-ASIN`, and item position as
+  separate fields. ULI commonly encodes the title and ASIN together as
+  `<series title> <series ASIN>`; this value is split using a strict ASIN suffix before
+  canonicalization. A ULI series value without that suffix is retained with a null
+  series ASIN. The export has no explicit sortable series title.
 - **Genres:** distinct CustomerGenres values.
 - **Marketplace:** ULI Marketplace. Conflicts produce a warning on stderr. An
   `amazon.com` domain wins; otherwise the first value by sorted domain wins.
