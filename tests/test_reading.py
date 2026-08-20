@@ -6,6 +6,7 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from kindle_export_reassembly import reconstruct_reading
+from kindle_export_reassembly.overview_cli import main as overview_main
 from kindle_export_reassembly.reading_cli import main as reading_main
 
 
@@ -37,7 +38,46 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "rights": [
                     {
                         "rightType": "Download",
+                        "acquiredDate": "2024-01-02T00:00:00Z",
                         "origin": {"originType": "Purchase"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ownership / "Digital.Content.Ownership.2.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "SAMPLE",
+                    "Product Name": "Sample Only",
+                    "resourceType": "KindleEBookSample",
+                },
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-01T00:00:00Z",
+                        "origin": {"originType": "Sample"},
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    (ownership / "Digital.Content.Ownership.3.json").write_text(
+        json.dumps(
+            {
+                "resource": {
+                    "ASIN": "DEFAULT",
+                    "Product Name": "Dictionary",
+                    "resourceType": "KindleEBook",
+                },
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2020-01-01T00:00:00Z",
+                        "origin": {"originType": "KindleDictionary"},
                     }
                 ],
             }
@@ -256,3 +296,35 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert output["completion_records"][0]["completed_on"] == "2024-01-01"
     assert "product_name" not in output["completion_records"][0]
     assert "personal_document_id" not in output["completion_records"][0]
+
+    overview_result = CliRunner().invoke(overview_main, [str(tmp_path)])
+    assert overview_result.exit_code == 0
+    overview_rows = list(
+        csv.DictReader(overview_result.output.splitlines(), dialect="excel-tab")
+    )
+    assert [row["key"] for row in overview_rows] == ["asin:SAMPLE", "asin:BOOK"]
+    assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00+00:00"
+    assert overview_rows[0]["acquired_book"] == ""
+    assert overview_rows[0]["total_reading_humanized"] == "0m"
+    assert overview_rows[1]["acquired_book"] == "2024-01-02T00:00:00+00:00"
+    assert overview_rows[1]["reading_start"] == "2024-01-01T10:00:00+00:00"
+    assert overview_rows[1]["reading_end"] == "2024-01-01T10:07:00+00:00"
+    assert overview_rows[1]["total_reading_humanized"] == "5m"
+
+    overview_json_result = CliRunner().invoke(
+        overview_main,
+        [
+            "--json",
+            "--include",
+            "BOOK,SAMPLE",
+            "--exclude",
+            "SAMPLE",
+            str(tmp_path),
+        ],
+    )
+    assert overview_json_result.exit_code == 0
+    overview_json = json.loads(overview_json_result.output)
+    assert overview_json["key"] == "asin:BOOK"
+    assert overview_json["acquired_sample"] is None
+    assert overview_json["acquired_book"] == "2024-01-02T00:00:00+00:00"
+    assert overview_json["total_reading_humanized"] == "5m"

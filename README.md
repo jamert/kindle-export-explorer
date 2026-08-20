@@ -20,6 +20,18 @@ key  asin  document_id  title  author  ownership_digital  ownership_print
 or `personal_document`. `ownership_print` is true only for a Unified Library Index
 ownership record without digital-ownership evidence.
 
+For a combined Kindle-only overview—including samples but excluding print books and
+Kindle defaults—use:
+
+```console
+uv run kindle-overview /path/to/Kindle > kindle-overview.tsv
+```
+
+The overview adds sample/book acquisition timestamps and reading start, reading end,
+and humanized device-session time. It is ordered by full-book acquisition date, using
+the sample acquisition date when no full-book acquisition exists. It supports
+`--include`, `--exclude`, and `--json`.
+
 Use `--extra` to add series title, series ASIN, series position, genres, and
 marketplace-derived links for the book and its series:
 

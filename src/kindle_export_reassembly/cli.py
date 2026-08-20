@@ -18,9 +18,9 @@ from .books import (
     ExportError,
     reconstruct_books,
 )
+from .cli_utils import parse_identifiers, select_books
 
 
-_IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 
 
@@ -83,7 +83,7 @@ def main(
     exclude: str | None,
 ) -> None:
     """Print canonical books reconstructed from EXPORT_DIRECTORY as TSV."""
-    requested_ids = _parse_identifiers(include, "--include")
+    requested_ids = parse_identifiers(include, "--include")
 
     try:
         books = reconstruct_books(
@@ -105,8 +105,8 @@ def main(
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    excluded_ids = _parse_identifiers(exclude, "--exclude")
-    books = _select_books(books, requested_ids, excluded_ids)
+    excluded_ids = parse_identifiers(exclude, "--exclude")
+    books = select_books(books, requested_ids, excluded_ids)
     if json_lines:
         _write_json_lines(books, extra, acquisition_by_key)
     else:
@@ -114,42 +114,6 @@ def main(
 
 
 # CLI implementation details
-
-def _parse_identifiers(value: str | None, option: str) -> set[str] | None:
-    if value is None:
-        return None
-    identifiers = {
-        identifier.strip().casefold()
-        for identifier in value.split(",")
-        if identifier.strip()
-    }
-    if not identifiers:
-        raise click.BadParameter(_IDENTIFIER_ERROR, param_hint=option)
-    return identifiers
-
-
-def _book_identifiers(book: BookCanonical) -> set[str]:
-    return {
-        identifier.casefold()
-        for identifier in (str(book.key), book.asin, book.document_id)
-        if identifier
-    }
-
-
-def _select_books(
-    books: list[BookCanonical],
-    included: set[str] | None,
-    excluded: set[str] | None,
-) -> list[BookCanonical]:
-    selected = books
-    if included is not None:
-        selected = [book for book in selected if _book_identifiers(book) & included]
-    if excluded is not None:
-        selected = [
-            book for book in selected if not (_book_identifiers(book) & excluded)
-        ]
-    return selected
-
 
 def _write_json_lines(
     books: list[BookCanonical],

@@ -10,6 +10,7 @@ dependencies = [
 
 [project.scripts]
 kindle-books = "kindle_export_reassembly.cli:main"
+kindle-overview = "kindle_export_reassembly.overview_cli:main"
 kindle-reading = "kindle_export_reassembly.reading_cli:main"
 kindle-export-reassembly = "kindle_export_reassembly.cli:main"
 
