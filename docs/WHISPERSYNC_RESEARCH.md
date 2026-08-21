@@ -122,3 +122,8 @@ uv run python scripts/explore_whispersync_read_state.py /path/to/Kindle
 The script appends `|` to an ASIN unchanged from the previous row and `-` to a changed
 ASIN. It includes deleted historical records by default; pass `--active-only` to omit
 tombstones.
+
+## TODO
+
+- semantics of `creation_date`, `customer_modified_date`, `last_updated_date`
+- I noticed on `asin:B007704HO6` that `last_updated_date` for one event, becomes `creation_date` for the next record of the same annotation type.
