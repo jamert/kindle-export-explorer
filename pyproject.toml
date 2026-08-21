@@ -1,7 +1,7 @@
 [project]
-name = "kindle-export-reassembly"
+name = "kindle-export-explorer"
 version = "0.1.0"
-description = "Reconstruct canonical books from an Amazon Kindle data export"
+description = "Explore and reconstruct an Amazon Kindle data export"
 readme = "README.md"
 requires-python = ">=3.14"
 dependencies = [
@@ -9,10 +9,7 @@ dependencies = [
 ]
 
 [project.scripts]
-kindle-books = "kindle_export_reassembly.cli:main"
-kindle-overview = "kindle_export_reassembly.overview_cli:main"
-kindle-reading = "kindle_export_reassembly.reading_cli:main"
-kindle-export-reassembly = "kindle_export_reassembly.cli:main"
+kindle-export-explorer = "kindle_export_explorer.cli:main"
 
 [build-system]
 requires = ["uv_build>=0.12.3,<0.13.0"]

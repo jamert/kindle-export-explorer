@@ -5,9 +5,9 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kindle_export_reassembly import reconstruct_reading
-from kindle_export_reassembly.overview_cli import main as overview_main
-from kindle_export_reassembly.reading_cli import main as reading_main
+from kindle_export_explorer import reconstruct_reading
+from kindle_export_explorer.cli import overview as overview_main
+from kindle_export_explorer.cli import reading as reading_main
 
 
 def write_csv(

@@ -11,11 +11,11 @@ from typing import Any
 
 import click
 
-from .acquisitions import BookAcquisition, reconstruct_acquisitions
-from .books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstruct_books
-from .cli_utils import parse_identifiers, select_books
-from .formatting import format_datetime
-from .reading import BookReading, reconstruct_reading
+from ..acquisitions import BookAcquisition, reconstruct_acquisitions
+from ..books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstruct_books
+from ..formatting import format_datetime
+from ..reading import BookReading, reconstruct_reading
+from .utils import parse_identifiers, select_books
 
 
 _OVERVIEW_HEADERS = (
@@ -52,7 +52,7 @@ _OVERVIEW_HEADERS = (
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
 )
-def main(
+def overview(
     export_directory: Path,
     json_lines: bool,
     include: str | None,
@@ -171,4 +171,4 @@ def _timestamp(value: datetime | None) -> str | None:
     return format_datetime(value) if value else None
 
 
-__all__ = ["main"]
+__all__ = ["overview"]

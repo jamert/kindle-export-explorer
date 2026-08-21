@@ -1,4 +1,4 @@
-"""Command-line interface for Kindle export reassembly."""
+"""Canonical-book command implementation."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import click
 
-from .acquisitions import BookAcquisition, reconstruct_acquisitions
-from .books import (
+from ..acquisitions import BookAcquisition, reconstruct_acquisitions
+from ..books import (
     EXTRA_HEADERS,
     HEADERS,
     BookCanonical,
@@ -18,8 +18,8 @@ from .books import (
     ExportError,
     reconstruct_books,
 )
-from .cli_utils import parse_identifiers, select_books
-from .formatting import format_datetime
+from ..formatting import format_datetime
+from .utils import parse_identifiers, select_books
 
 
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
@@ -72,7 +72,7 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
 )
-def main(
+def books(
     export_directory: Path,
     show_default: bool,
     show_samples: bool,
@@ -155,4 +155,4 @@ def _acquisition_values(
     }
 
 
-__all__ = ["main"]
+__all__ = ["books"]

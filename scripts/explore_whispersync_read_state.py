@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from kindle_export_reassembly.books import ExportFiles, clean
+from kindle_export_explorer.books import ExportFiles, clean
 
 
 _ANNOTATION_TYPES = (

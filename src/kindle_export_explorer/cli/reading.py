@@ -10,9 +10,9 @@ from typing import Any
 
 import click
 
-from .books import CanonicalKey, ExportError, reconstruct_books
-from .formatting import format_datetime
-from .reading import BookReading, reconstruct_reading
+from ..books import CanonicalKey, ExportError, reconstruct_books
+from ..formatting import format_datetime
+from ..reading import BookReading, reconstruct_reading
 
 
 _OMITTED_RECORD_FIELDS = {
@@ -36,7 +36,7 @@ _OMITTED_RECORD_FIELDS = {
     "export_directory",
     type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
 )
-def main(canonical_key: str, export_directory: Path) -> None:
+def reading(canonical_key: str, export_directory: Path) -> None:
     """Print reading records for CANONICAL_KEY from EXPORT_DIRECTORY as JSON."""
     key = _parse_canonical_key(canonical_key)
     try:
@@ -119,4 +119,4 @@ def _json_default(value: object) -> str:
     raise TypeError(f"cannot serialize {type(value).__name__}")
 
 
-__all__ = ["main"]
+__all__ = ["reading"]

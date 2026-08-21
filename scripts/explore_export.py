@@ -16,7 +16,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
-from kindle_export_reassembly.books import clean, normalize_sharded_path
+from kindle_export_explorer.books import clean, normalize_sharded_path
 
 
 LOW_CARDINALITY_LIMIT = 10

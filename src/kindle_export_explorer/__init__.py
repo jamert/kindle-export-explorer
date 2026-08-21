@@ -1,4 +1,4 @@
-"""Public API for Kindle export reassembly."""
+"""Public API for Kindle export exploration and reconstruction."""
 
 from .acquisitions import (
     AcquisitionCanonicalizationService,

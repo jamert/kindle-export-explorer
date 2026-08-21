@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import click
 
-from .books import BookCanonical
+from ..books import BookCanonical
 
 
 _IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"

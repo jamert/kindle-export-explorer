@@ -4,7 +4,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-from kindle_export_reassembly import (
+from kindle_export_explorer import (
     BookMetadata,
     CanonicalizationService,
     CanonicalKey,
@@ -12,8 +12,8 @@ from kindle_export_reassembly import (
     KindleBookRecord,
     PrintBookRecord,
 )
-from kindle_export_reassembly.books import normalize_sharded_path, reconstruct_books
-from kindle_export_reassembly.cli import main
+from kindle_export_explorer.books import normalize_sharded_path, reconstruct_books
+from kindle_export_explorer.cli import books as main
 
 
 def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:

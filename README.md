@@ -1,4 +1,4 @@
-# kindle-export-reassembly
+# kindle-export-explorer
 
 Reconstruct canonical book records from an Amazon Kindle data export. Source rows are
 joined first, then resolved into the `BookCanonical` schema. Acquisition and reading
@@ -6,8 +6,10 @@ records are available through separate Python APIs.
 
 ## Run
 
+The unified CLI provides `books`, `overview`, and `reading` subcommands:
+
 ```console
-uv run kindle-books /path/to/Kindle > books.tsv
+uv run kindle-export-explorer books /path/to/Kindle > books.tsv
 ```
 
 The default TSV fields are:
@@ -24,7 +26,7 @@ For a combined Kindle-only overview—including samples but excluding print book
 Kindle defaults—use:
 
 ```console
-uv run kindle-overview /path/to/Kindle > kindle-overview.tsv
+uv run kindle-export-explorer overview /path/to/Kindle > kindle-overview.tsv
 ```
 
 The overview adds sample/book acquisition timestamps. Device-session summary fields
@@ -39,7 +41,7 @@ Use `--extra` to add series title, series ASIN, series position, genres, and
 marketplace-derived links for the book and its series:
 
 ```console
-uv run kindle-books --extra /path/to/Kindle > books-extra.tsv
+uv run kindle-export-explorer books --extra /path/to/Kindle > books-extra.tsv
 ```
 
 Use `--jsonl` (or `--json`) for one JSON object per line. JSON preserves the nested
@@ -47,7 +49,7 @@ Use `--jsonl` (or `--json`) for one JSON object per line. JSON preserves the nes
 metadata have `"series": null` when `--extra` is enabled:
 
 ```console
-uv run kindle-books --jsonl --extra /path/to/Kindle > books.jsonl
+uv run kindle-export-explorer books --jsonl --extra /path/to/Kindle > books.jsonl
 ```
 
 ## Keys and filtering
@@ -67,10 +69,10 @@ Print-only records are available with `--source print`; use `--source all` for e
 ownership type:
 
 ```console
-uv run kindle-books --show-samples /path/to/Kindle
-uv run kindle-books --show-default /path/to/Kindle
-uv run kindle-books --source print /path/to/Kindle
-uv run kindle-books --source all --show-samples --show-default /path/to/Kindle
+uv run kindle-export-explorer books --show-samples /path/to/Kindle
+uv run kindle-export-explorer books --show-default /path/to/Kindle
+uv run kindle-export-explorer books --source print /path/to/Kindle
+uv run kindle-export-explorer books --source all --show-samples --show-default /path/to/Kindle
 ```
 
 Select comma-separated keys, ASINs, or document IDs with `--include`. Explicit
@@ -78,8 +80,8 @@ inclusion overrides source, sample, and default-content filters. `--exclude` alw
 wins:
 
 ```console
-uv run kindle-books --include B00B7NPRY8,DOC-123 /path/to/Kindle
-uv run kindle-books --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path/to/Kindle
+uv run kindle-export-explorer books --include B00B7NPRY8,DOC-123 /path/to/Kindle
+uv run kindle-export-explorer books --include B00B7NPRY8,DOC-123 --exclude DOC-123 /path/to/Kindle
 ```
 
 When one canonical key has conflicting marketplaces, the program warns on stderr and
@@ -92,7 +94,7 @@ The Python API also reconstructs acquisition events separately from intrinsic bo
 metadata:
 
 ```python
-from kindle_export_reassembly import reconstruct_acquisitions
+from kindle_export_explorer import reconstruct_acquisitions
 
 acquisitions = reconstruct_acquisitions(export_directory)
 ```
@@ -106,7 +108,7 @@ consumption/download records are deliberately ignored.
 Add the derived timestamps to TSV or JSONL book output with `--acquisition`:
 
 ```console
-uv run kindle-books --acquisition /path/to/Kindle > books-with-acquisition.tsv
+uv run kindle-export-explorer books --acquisition /path/to/Kindle > books-with-acquisition.tsv
 ```
 
 The additional fields are `acquired_sample` and `acquired_book`. Missing timestamps
@@ -118,7 +120,7 @@ The Python API collects source-specific reading records by canonical key without
 attempting to merge them into canonical sessions:
 
 ```python
-from kindle_export_reassembly import reconstruct_reading
+from kindle_export_explorer import reconstruct_reading
 
 reading = reconstruct_reading(export_directory)
 ```
@@ -142,15 +144,15 @@ distinct calendar dates represented by the earliest creation plus all customer-m
 timestamps:
 
 ```console
-uv run kindle-reading asin:B004PYDAPE /path/to/Kindle
-uv run kindle-reading document:3TH4XYQKJZXM3ZEXIR6IZODX6IMC4YAD /path/to/Kindle
+uv run kindle-export-explorer reading asin:B004PYDAPE /path/to/Kindle
+uv run kindle-export-explorer reading document:3TH4XYQKJZXM3ZEXIR6IZODX6IMC4YAD /path/to/Kindle
 ```
 
 The export directory is the directory containing folders such as
 `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
 `Kindle.FileDescriptions.csv` file is not required.
 
-Use `uv run kindle-books --help` for CLI help.
+Use `uv run kindle-export-explorer --help` for CLI help.
 
 See [`docs/ER_DIAGRAM.md`](docs/ER_DIAGRAM.md) for source relationships and join
 rules. [`docs/WHISPERSYNC_RESEARCH.md`](docs/WHISPERSYNC_RESEARCH.md) records the
