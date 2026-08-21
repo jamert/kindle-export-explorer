@@ -1,8 +1,27 @@
 # kindle-export-explorer
 
-Reconstruct canonical book records from an Amazon Kindle data export. Source rows are
-joined first, then resolved into the `BookCanonical` schema. Acquisition and reading
-records are available through separate Python APIs.
+Utility takes data from Amazon's Kindle Data Request and produces:
+1. A list of books (primarily Kindle ones) that you have from Amazon (curiously, it includes print books, too)
+2. Reconstruction of reading sessions (in progress).
+
+Kindle export data are not documented precisely and 
+
+> [!WARNING]
+> The utility is early work in progress.
+> Code is heavily AI-generated, without much style enforcement at the moment.
+>
+> I have two goals for this project:
+> 1. To produce useful utility for personal use
+> 2. To try out some experimental practices related to data processing and agentic coding
+
+## Plans
+
+- Detailed reconstructed reading sessions data
+- Cross-checks between different reading sessions sources
+- Reasonably supported claims that the book was finished
+- Work with archive directly without unpacking
+- Enrich books with external information (ISBN, possibly page count)
+- Extra automatic verification practices: fuzzing, source-result provenance, etc.
 
 ## Run
 
