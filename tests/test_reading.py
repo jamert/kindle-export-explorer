@@ -252,17 +252,14 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     )
     assert book.device_sessions[0].total_reading_millis == 299500
     assert book.device_sessions[0].number_of_page_flips == 12
-    assert book.device_sessions_summary.start == datetime(
-        2024, 1, 1, 10, tzinfo=timezone.utc
-    )
-    assert book.device_sessions_summary.end == datetime(
-        2024, 1, 1, 10, 7, tzinfo=timezone.utc
-    )
-    assert book.device_sessions_summary.total_reading_millis == 299500
-    assert book.device_sessions_summary.total_reading_humanized == "5m"
-    assert book.device_sessions_summary.total_page_flips == 12
-    assert book.device_sessions_summary.total_count == 2
-    assert book.device_sessions_summary.non_zero_count == 1
+    device_summary = book.device_sessions_summary
+    assert device_summary is not None
+    assert device_summary.start == datetime(2024, 1, 1, 10, tzinfo=timezone.utc)
+    assert device_summary.end == datetime(2024, 1, 1, 10, 7, tzinfo=timezone.utc)
+    assert device_summary.total_reading_millis == 299500
+    assert device_summary.total_reading_humanized == "5m"
+    assert device_summary.total_page_flips == 12
+    assert device_summary.total_count == 1
     assert len(book.insights_sessions) == 1
     assert book.insights_sessions[0].start == datetime(
         2024, 1, 1, 10, 0, 0, 500000, tzinfo=timezone.utc
@@ -286,6 +283,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     document = by_key["document:DOC-ID"]
     assert len(document.whispersync_records) == 1
     assert not document.device_sessions
+    assert document.device_sessions_summary is None
 
     result = CliRunner().invoke(
         reading_main,
@@ -303,8 +301,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
         "total_reading_millis": 299500,
         "total_reading_humanized": "5m",
         "total_page_flips": 12,
-        "total_count": 2,
-        "non_zero_count": 1,
+        "total_count": 1,
     }
     assert "asin" not in output["device_sessions"][0]
     assert "preferred_marketplace" not in output["device_sessions"][0]
@@ -337,7 +334,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert [row["key"] for row in overview_rows] == ["asin:SAMPLE", "asin:BOOK"]
     assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00Z"
     assert overview_rows[0]["acquired_book"] == ""
-    assert overview_rows[0]["reading_ds_total_reading_humanized"] == "0m"
+    assert overview_rows[0]["reading_ds_total_reading_humanized"] == ""
     assert overview_rows[0]["reading_ws_dates_unique"] == "0"
     assert overview_rows[1]["acquired_book"] == "2024-01-02T00:00:00Z"
     assert overview_rows[1]["reading_ds_start"] == "2024-01-01T10:00:00Z"

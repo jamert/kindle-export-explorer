@@ -21,7 +21,6 @@ class DeviceSessionsSummary:
     total_reading_humanized: str
     total_page_flips: int
     total_count: int
-    non_zero_count: int
 
 
 @dataclass(frozen=True)
@@ -46,7 +45,9 @@ class BookReading:
     completion_records: list[TitleCompletionRecord] = field(default_factory=list)
 
     @property
-    def device_sessions_summary(self) -> DeviceSessionsSummary:
+    def device_sessions_summary(self) -> DeviceSessionsSummary | None:
+        if not self.device_sessions:
+            return None
         starts = [session.start for session in self.device_sessions if session.start]
         ends = [session.end for session in self.device_sessions if session.end]
         reading_millis = [
@@ -66,8 +67,7 @@ class BookReading:
             total_reading_millis=total_reading_millis,
             total_reading_humanized=_humanize_millis(total_reading_millis),
             total_page_flips=sum(page_flips),
-            total_count=len(self.device_sessions),
-            non_zero_count=len(reading_millis),
+            total_count=len(reading_millis),
         )
 
     @property

@@ -89,10 +89,13 @@ def _parse_canonical_key(value: str) -> CanonicalKey:
 
 
 def _reading_as_dict(reading: BookReading, title: str | None) -> dict[str, Any]:
+    device_summary = reading.device_sessions_summary
     result: dict[str, Any] = {
         "key": str(reading.key),
         "title": title,
-        "device_sessions_summary": asdict(reading.device_sessions_summary),
+        "device_sessions_summary": (
+            asdict(device_summary) if device_summary else None
+        ),
         "whispersync_record_summary": asdict(reading.whispersync_record_summary),
     }
     for item in fields(reading):

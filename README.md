@@ -135,8 +135,8 @@ profiled export, so it contributes no additional observable reading evidence.
 Inspect one book's records as JSON with its canonical key. The command joins the canonical title from the ownership metadata and includes a
 `device_sessions_summary` with the minimum start, maximum end, summed non-zero reading
 milliseconds, a minute-resolution humanized duration such as `5h14m`, summed page
-flips, total session count, and count of sessions with non-zero reading time. It also
-includes `whispersync_record_summary`, based only on `kindle.most_recent_read`, with
+flips, and a count of sessions with non-zero reading time. The summary is `null` when
+there are no device-session records. It also includes `whispersync_record_summary`, based only on `kindle.most_recent_read`, with
 the earliest creation timestamp, latest customer-modified timestamp, and number of
 distinct calendar dates represented by the earliest creation plus all customer-modified
 timestamps:

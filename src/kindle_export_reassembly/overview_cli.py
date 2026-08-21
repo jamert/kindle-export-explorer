@@ -140,7 +140,7 @@ def _overview_values(
         ),
         "reading_ds_end": _timestamp(device_summary.end if device_summary else None),
         "reading_ds_total_reading_humanized": (
-            device_summary.total_reading_humanized if device_summary else "0m"
+            device_summary.total_reading_humanized if device_summary else None
         ),
         "reading_ws_start": _timestamp(
             whispersync_summary.start if whispersync_summary else None
