@@ -33,6 +33,7 @@ from .reading import (
     ReadingInsightsSessionRecord,
     TitleCompletionRecord,
     WhispersyncRecord,
+    WhispersyncRecordSummary,
     reconstruct_reading,
 )
 
@@ -64,6 +65,7 @@ __all__ = [
     "Series",
     "TitleCompletionRecord",
     "WhispersyncRecord",
+    "WhispersyncRecordSummary",
     "reconstruct_acquisitions",
     "reconstruct_books",
     "reconstruct_reading",

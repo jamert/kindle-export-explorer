@@ -27,9 +27,12 @@ Kindle defaults—use:
 uv run kindle-overview /path/to/Kindle > kindle-overview.tsv
 ```
 
-The overview adds sample/book acquisition timestamps and reading start, reading end,
-and humanized device-session time. It is ordered by full-book acquisition date, using
-the sample acquisition date when no full-book acquisition exists. It supports
+The overview adds sample/book acquisition timestamps. Device-session summary fields
+use the `reading_ds_` prefix (`reading_ds_start`, `reading_ds_end`, and
+`reading_ds_total_reading_humanized`). Whispersync summary fields use `reading_ws_`
+(`reading_ws_start`, `reading_ws_end`, and `reading_ws_dates_unique`). It is ordered by
+full-book acquisition date, using the sample acquisition date when no full-book
+acquisition exists. It supports
 `--include`, `--exclude`, and `--json`.
 
 Use `--extra` to add series title, series ASIN, series position, genres, and
@@ -132,7 +135,11 @@ profiled export, so it contributes no additional observable reading evidence.
 Inspect one book's records as JSON with its canonical key. The command joins the canonical title from the ownership metadata and includes a
 `device_sessions_summary` with the minimum start, maximum end, summed non-zero reading
 milliseconds, a minute-resolution humanized duration such as `5h14m`, summed page
-flips, total session count, and count of sessions with non-zero reading time:
+flips, total session count, and count of sessions with non-zero reading time. It also
+includes `whispersync_record_summary`, based only on `kindle.most_recent_read`, with
+the earliest creation timestamp, latest customer-modified timestamp, and number of
+distinct calendar dates represented by the earliest creation plus all customer-modified
+timestamps:
 
 ```console
 uv run kindle-reading asin:B004PYDAPE /path/to/Kindle

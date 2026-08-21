@@ -22,9 +22,12 @@ _OVERVIEW_HEADERS = (
     *HEADERS,
     "acquired_sample",
     "acquired_book",
-    "reading_start",
-    "reading_end",
-    "total_reading_humanized",
+    "reading_ds_start",
+    "reading_ds_end",
+    "reading_ds_total_reading_humanized",
+    "reading_ws_start",
+    "reading_ws_end",
+    "reading_ws_dates_unique",
 )
 
 
@@ -113,7 +116,10 @@ def _write_tsv(
         writer.writerow(
             [
                 *book.as_row(),
-                *(values[header] or "" for header in _OVERVIEW_HEADERS[len(HEADERS) :]),
+                *(
+                    "" if values[header] is None else values[header]
+                    for header in _OVERVIEW_HEADERS[len(HEADERS) :]
+                ),
             ]
         )
 
@@ -124,14 +130,26 @@ def _overview_values(
 ) -> dict[str, Any]:
     acquired_sample = acquisition.acquired_sample if acquisition else None
     acquired_book = acquisition.acquired_book if acquisition else None
-    summary = reading.device_sessions_summary if reading else None
+    device_summary = reading.device_sessions_summary if reading else None
+    whispersync_summary = reading.whispersync_record_summary if reading else None
     return {
         "acquired_sample": _timestamp(acquired_sample),
         "acquired_book": _timestamp(acquired_book),
-        "reading_start": _timestamp(summary.start if summary else None),
-        "reading_end": _timestamp(summary.end if summary else None),
-        "total_reading_humanized": (
-            summary.total_reading_humanized if summary else "0m"
+        "reading_ds_start": _timestamp(
+            device_summary.start if device_summary else None
+        ),
+        "reading_ds_end": _timestamp(device_summary.end if device_summary else None),
+        "reading_ds_total_reading_humanized": (
+            device_summary.total_reading_humanized if device_summary else "0m"
+        ),
+        "reading_ws_start": _timestamp(
+            whispersync_summary.start if whispersync_summary else None
+        ),
+        "reading_ws_end": _timestamp(
+            whispersync_summary.end if whispersync_summary else None
+        ),
+        "reading_ws_dates_unique": (
+            whispersync_summary.dates_unique if whispersync_summary else 0
         ),
     }
 

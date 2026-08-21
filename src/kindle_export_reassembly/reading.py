@@ -24,6 +24,13 @@ class DeviceSessionsSummary:
     non_zero_count: int
 
 
+@dataclass(frozen=True)
+class WhispersyncRecordSummary:
+    start: datetime | None
+    end: datetime | None
+    dates_unique: int
+
+
 @dataclass
 class BookReading:
     key: CanonicalKey
@@ -61,6 +68,31 @@ class BookReading:
             total_page_flips=sum(page_flips),
             total_count=len(self.device_sessions),
             non_zero_count=len(reading_millis),
+        )
+
+    @property
+    def whispersync_record_summary(self) -> WhispersyncRecordSummary:
+        records = [
+            record
+            for record in self.whispersync_records
+            if record.annotation_type == "kindle.most_recent_read"
+        ]
+        creation_dates = [
+            record.creation_date for record in records if record.creation_date
+        ]
+        modified_dates = [
+            record.customer_modified_date
+            for record in records
+            if record.customer_modified_date
+        ]
+        start = min(creation_dates, default=None)
+        unique_dates = {value.date() for value in modified_dates}
+        if start is not None:
+            unique_dates.add(start.date())
+        return WhispersyncRecordSummary(
+            start=start,
+            end=max(modified_dates, default=None),
+            dates_unique=len(unique_dates),
         )
 
 

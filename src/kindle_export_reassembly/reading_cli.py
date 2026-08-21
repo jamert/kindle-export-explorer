@@ -93,6 +93,7 @@ def _reading_as_dict(reading: BookReading, title: str | None) -> dict[str, Any]:
         "key": str(reading.key),
         "title": title,
         "device_sessions_summary": asdict(reading.device_sessions_summary),
+        "whispersync_record_summary": asdict(reading.whispersync_record_summary),
     }
     for item in fields(reading):
         if item.name != "key":

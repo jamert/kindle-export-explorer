@@ -162,6 +162,26 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
             [
                 "BOOK",
                 "",
+                "kindle.most_recent_read",
+                "EBSP",
+                "2023-12-31T12:00:00Z",
+                "2024-01-02T12:00:00Z",
+                "2024-01-02T12:00:01Z",
+                "No",
+            ],
+            [
+                "BOOK",
+                "",
+                "kindle.most_recent_read",
+                "EBSP",
+                "2024-01-01T12:00:00Z",
+                "2024-01-02T13:00:00Z",
+                "2024-01-02T13:00:01Z",
+                "No",
+            ],
+            [
+                "BOOK",
+                "",
                 "kindle.highlight",
                 "EBSP",
                 "2024-01-01T10:03:00Z",
@@ -247,8 +267,15 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert book.insights_sessions[0].start == datetime(
         2024, 1, 1, 10, 0, 0, 500000, tzinfo=timezone.utc
     )
-    assert len(book.whispersync_records) == 1
+    assert len(book.whispersync_records) == 3
     assert book.whispersync_records[0].content_type == "EBSP"
+    assert book.whispersync_record_summary.start == datetime(
+        2023, 12, 31, 12, tzinfo=timezone.utc
+    )
+    assert book.whispersync_record_summary.end == datetime(
+        2024, 1, 2, 13, tzinfo=timezone.utc
+    )
+    assert book.whispersync_record_summary.dates_unique == 2
     assert len(book.reading_action_containers) == 1
     assert book.reading_action_containers[0].entry_point == "Reach end of book"
     assert len(book.auto_mark_as_read_records) == 1
@@ -289,7 +316,12 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert "asin" not in output["insights_sessions"][0]
     assert "product_name" not in output["insights_sessions"][0]
     assert "reading_marketplace" not in output["insights_sessions"][0]
-    assert len(output["whispersync_records"]) == 1
+    assert output["whispersync_record_summary"] == {
+        "start": "2023-12-31T12:00:00Z",
+        "end": "2024-01-02T13:00:00Z",
+        "dates_unique": 2,
+    }
+    assert len(output["whispersync_records"]) == 3
     assert "asin" not in output["whispersync_records"][0]
     assert "non_asin" not in output["whispersync_records"][0]
     assert "third_party_device" not in output["whispersync_records"][0]
@@ -305,11 +337,15 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert [row["key"] for row in overview_rows] == ["asin:SAMPLE", "asin:BOOK"]
     assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00Z"
     assert overview_rows[0]["acquired_book"] == ""
-    assert overview_rows[0]["total_reading_humanized"] == "0m"
+    assert overview_rows[0]["reading_ds_total_reading_humanized"] == "0m"
+    assert overview_rows[0]["reading_ws_dates_unique"] == "0"
     assert overview_rows[1]["acquired_book"] == "2024-01-02T00:00:00Z"
-    assert overview_rows[1]["reading_start"] == "2024-01-01T10:00:00Z"
-    assert overview_rows[1]["reading_end"] == "2024-01-01T10:07:00Z"
-    assert overview_rows[1]["total_reading_humanized"] == "5m"
+    assert overview_rows[1]["reading_ds_start"] == "2024-01-01T10:00:00Z"
+    assert overview_rows[1]["reading_ds_end"] == "2024-01-01T10:07:00Z"
+    assert overview_rows[1]["reading_ds_total_reading_humanized"] == "5m"
+    assert overview_rows[1]["reading_ws_start"] == "2023-12-31T12:00:00Z"
+    assert overview_rows[1]["reading_ws_end"] == "2024-01-02T13:00:00Z"
+    assert overview_rows[1]["reading_ws_dates_unique"] == "2"
 
     overview_json_result = CliRunner().invoke(
         overview_main,
@@ -327,4 +363,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert overview_json["key"] == "asin:BOOK"
     assert overview_json["acquired_sample"] is None
     assert overview_json["acquired_book"] == "2024-01-02T00:00:00Z"
-    assert overview_json["total_reading_humanized"] == "5m"
+    assert overview_json["reading_ds_total_reading_humanized"] == "5m"
+    assert overview_json["reading_ws_start"] == "2023-12-31T12:00:00Z"
+    assert overview_json["reading_ws_end"] == "2024-01-02T13:00:00Z"
+    assert overview_json["reading_ws_dates_unique"] == 2
