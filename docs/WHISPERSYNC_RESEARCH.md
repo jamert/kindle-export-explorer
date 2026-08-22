@@ -116,7 +116,7 @@ position payload.
 Generate the global rolling state with:
 
 ```console
-uv run python scripts/explore_whispersync_read_state.py /path/to/Kindle
+uv run python scripts/explore_whispersync_read_state.py /path/to/Kindle.zip
 ```
 
 The script appends `|` to an ASIN unchanged from the previous row and `-` to a changed

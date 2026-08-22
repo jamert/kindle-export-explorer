@@ -19,16 +19,17 @@ Kindle export data are not documented precisely and
 - Detailed reconstructed reading sessions data
 - Cross-checks between different reading sessions sources
 - Reasonably supported claims that the book was finished
-- Work with archive directly without unpacking
 - Enrich books with external information (ISBN, possibly page count)
 - Extra automatic verification practices: fuzzing, source-result provenance, etc.
 
 ## Run
 
-The unified CLI provides `books`, `overview`, and `reading` subcommands:
+The unified CLI provides `books`, `overview`, and `reading` subcommands. Every
+command accepts either the original Kindle ZIP archive or an unpacked directory;
+the results are identical and the archive is read directly without extraction:
 
 ```console
-uv run kindle-export-explorer books /path/to/Kindle > books.tsv
+uv run kindle-export-explorer books /path/to/Kindle.zip > books.tsv
 ```
 
 The default TSV fields are:
@@ -167,9 +168,9 @@ uv run kindle-export-explorer reading asin:B004PYDAPE /path/to/Kindle
 uv run kindle-export-explorer reading document:3TH4XYQKJZXM3ZEXIR6IZODX6IMC4YAD /path/to/Kindle
 ```
 
-The export directory is the directory containing folders such as
-`Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`. The separate
-`Kindle.FileDescriptions.csv` file is not required.
+The export path can be the ZIP archive or the unpacked directory containing
+folders such as `Digital.Content.Ownership` and `Kindle.UnifiedLibraryIndex`.
+The separate `Kindle.FileDescriptions.csv` file is not required.
 
 Use `uv run kindle-export-explorer --help` for CLI help.
 
@@ -184,7 +185,7 @@ counts, unique and empty values, low-cardinality domains, examples, and key-like
 columns. True file shards and versioned dataset partitions are profiled together:
 
 ```console
-uv run python scripts/explore_export.py /path/to/Kindle -o data-profile.md
+uv run python scripts/explore_export.py /path/to/Kindle.zip -o data-profile.md
 ```
 
 ## Develop

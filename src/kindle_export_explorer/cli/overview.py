@@ -49,29 +49,29 @@ _OVERVIEW_HEADERS = (
     help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
 )
 @click.argument(
-    "export_directory",
-    type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
+    "export_path",
+    type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
 def overview(
-    export_directory: Path,
+    export_path: Path,
     json_lines: bool,
     include: str | None,
     exclude: str | None,
 ) -> None:
-    """Print a Kindle book, acquisition, and reading overview."""
+    """Print an overview from a Kindle export directory or ZIP archive."""
     included_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
     try:
         books = reconstruct_books(
-            export_directory,
+            export_path,
             show_default=False,
             show_samples=True,
             source="kindle",
         )
         acquisitions = {
-            item.key: item for item in reconstruct_acquisitions(export_directory)
+            item.key: item for item in reconstruct_acquisitions(export_path)
         }
-        readings = {item.key: item for item in reconstruct_reading(export_directory)}
+        readings = {item.key: item for item in reconstruct_reading(export_path)}
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 

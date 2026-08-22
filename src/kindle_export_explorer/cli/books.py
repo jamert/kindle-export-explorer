@@ -69,11 +69,11 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
     help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
 )
 @click.argument(
-    "export_directory",
-    type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
+    "export_path",
+    type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
 def books(
-    export_directory: Path,
+    export_path: Path,
     show_default: bool,
     show_samples: bool,
     source: str,
@@ -83,12 +83,12 @@ def books(
     include: str | None,
     exclude: str | None,
 ) -> None:
-    """Print canonical books reconstructed from EXPORT_DIRECTORY as TSV."""
+    """Print canonical books reconstructed from directory or ZIP EXPORT_PATH."""
     requested_ids = parse_identifiers(include, "--include")
 
     try:
         books = reconstruct_books(
-            export_directory,
+            export_path,
             # Explicit IDs override all category filters. Exclusion is still
             # applied below and therefore always wins.
             show_default=True if requested_ids is not None else show_default,
@@ -98,7 +98,7 @@ def books(
         acquisition_by_key = (
             {
                 item.key: item
-                for item in reconstruct_acquisitions(export_directory)
+                for item in reconstruct_acquisitions(export_path)
             }
             if acquisition
             else None

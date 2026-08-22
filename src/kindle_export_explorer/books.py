@@ -9,8 +9,9 @@ import sys
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
-from pathlib import Path
-from typing import Iterator
+from pathlib import Path, PurePosixPath
+from typing import Any, Iterator, TypeAlias, cast
+from zipfile import BadZipFile, Path as ZipPath, ZipFile, is_zipfile
 
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
@@ -21,7 +22,10 @@ _EBOOK_KIND = "ebook"
 
 
 class ExportError(ValueError):
-    """Raised when a directory is not a recognizable Kindle export."""
+    """Raised when a path is not a recognizable Kindle export."""
+
+
+ExportPath: TypeAlias = Path | ZipPath
 
 
 # Canonical output model
@@ -186,9 +190,6 @@ def reconstruct_books(
     if source not in {"kindle", "print", "all"}:
         raise ValueError(f"invalid source: {source}")
     root = root.expanduser()
-    if not root.is_dir():
-        raise ExportError(f"not a directory: {root}")
-
     catalog = _assemble_source_records(root)
     return _canonicalize_records(
         catalog,
@@ -581,28 +582,36 @@ def split_series_title_and_asin(value: object) -> tuple[str, str | None]:
     return match.group("title"), match.group("asin")
 
 
-def _partitioned_dataset_path(path: Path) -> Path | None:
+def _relative_path(root: ExportPath, path: ExportPath) -> str:
+    """Return a POSIX relative path for pathlib and zipfile paths."""
+    relative = cast(Any, path).relative_to(cast(Any, root))
+    return relative if isinstance(relative, str) else relative.as_posix()
+
+
+def _partitioned_dataset_path(root: ExportPath, path: ExportPath) -> str | None:
     """Return a wildcard path when sibling version directories form one dataset."""
-    match = _VERSIONED_DATASET.match(path.stem)
-    if not match or path.parent.name != path.stem:
+    item = cast(Any, path)
+    match = _VERSIONED_DATASET.match(item.stem)
+    if not match or item.parent.name != item.stem:
         return None
     base = match.group("base")
     matching_files = []
-    for directory in path.parent.parent.iterdir():
+    for directory in item.parent.parent.iterdir():
         directory_match = _VERSIONED_DATASET.match(directory.name)
         if not directory.is_dir() or not directory_match:
             continue
         if directory_match.group("base") != base:
             continue
-        candidate = directory / f"{directory.name}{path.suffix}"
+        candidate = directory / f"{directory.name}{item.suffix}"
         if candidate.is_file():
             matching_files.append(candidate)
     if len(matching_files) < 2:
         return None
-    return path.parent.parent / f"{base}.*" / f"*{path.suffix}"
+    parent = _relative_path(root, item.parent.parent)
+    return (PurePosixPath(parent) / f"{base}.*" / f"*{item.suffix}").as_posix()
 
 
-def normalize_sharded_path(root: Path, path: Path) -> str:
+def normalize_sharded_path(root: ExportPath, path: ExportPath) -> str:
     """Return a stable export-relative path for shards and dataset partitions.
 
     Numbered files in one directory collapse to ``shard.<extension>``. Files whose
@@ -610,27 +619,31 @@ def normalize_sharded_path(root: Path, path: Path) -> str:
     two-level wildcard such as ``Dataset.*/*.csv``. Singleton numbered/versioned
     files retain their exact names.
     """
-    partitioned_path = _partitioned_dataset_path(path)
+    partitioned_path = _partitioned_dataset_path(root, path)
     if partitioned_path is not None:
-        path = partitioned_path
-    else:
-        match = _NUMBERED_SHARD.match(path.name)
-        if match:
-            pattern = f"{match.group('base')}.*{match.group('extension')}"
-            matching_siblings = (
-                sibling
-                for sibling in path.parent.glob(pattern)
-                if (sibling_match := _NUMBERED_SHARD.match(sibling.name))
-                and sibling_match.group("base") == match.group("base")
-                and sibling_match.group("extension") == match.group("extension")
-            )
-            if sum(1 for _ in matching_siblings) > 1:
-                path = path.with_name(f"shard{match.group('extension')}")
-    return path.relative_to(root).as_posix()
+        return partitioned_path
+
+    item = cast(Any, path)
+    match = _NUMBERED_SHARD.match(item.name)
+    if match:
+        pattern = f"{match.group('base')}.*{match.group('extension')}"
+        matching_siblings = (
+            sibling
+            for sibling in item.parent.glob(pattern)
+            if (sibling_match := _NUMBERED_SHARD.match(sibling.name))
+            and sibling_match.group("base") == match.group("base")
+            and sibling_match.group("extension") == match.group("extension")
+        )
+        if sum(1 for _ in matching_siblings) > 1:
+            parent = _relative_path(root, item.parent)
+            return (
+                PurePosixPath(parent) / f"shard{match.group('extension')}"
+            ).as_posix()
+    return _relative_path(root, path)
 
 
 def _csv_rows(
-    root: Path, paths: Iterable[Path]
+    root: ExportPath, paths: Iterable[ExportPath]
 ) -> Iterator[tuple[str, dict[str, str]]]:
     for path in paths:
         try:
@@ -643,12 +656,50 @@ def _csv_rows(
 
 
 class ExportFiles:
-    """Index export files once and reuse the index for all dataset lookups."""
+    """Index files in an unpacked export directory or ZIP archive."""
 
-    def __init__(self, root: Path) -> None:
-        self._files = sorted(path for path in root.rglob("*") if path.is_file())
+    def __init__(self, source: Path) -> None:
+        self.source = source.expanduser()
+        self._archive: ZipFile | None = None
+        if self.source.is_dir():
+            self.root: ExportPath = self.source
+        elif self.source.is_file() and is_zipfile(self.source):
+            try:
+                self._archive = ZipFile(self.source)
+                archive_root = ZipPath(self._archive)
+                children = [
+                    child
+                    for child in archive_root.iterdir()
+                    if child.name != "__MACOSX"
+                ]
+                # Accept archives made from either the contents of Kindle/ or the
+                # Kindle/ directory itself.
+                self.root = (
+                    children[0]
+                    if len(children) == 1
+                    and children[0].is_dir()
+                    and children[0].name.casefold() == "kindle"
+                    else archive_root
+                )
+            except (OSError, BadZipFile) as exc:
+                raise ExportError(
+                    f"cannot read ZIP archive {self.source}: {exc}"
+                ) from exc
+        else:
+            raise ExportError(f"not a directory or ZIP archive: {self.source}")
 
-    def named(self, fragment: str, suffix: str = ".csv") -> list[Path]:
+        self._files = sorted(
+            (path for path in self.root.rglob("*") if path.is_file()),
+            key=lambda path: _relative_path(self.root, path),
+        )
+
+    def __iter__(self) -> Iterator[ExportPath]:
+        return iter(self._files)
+
+    def relative(self, path: ExportPath) -> str:
+        return _relative_path(self.root, path)
+
+    def named(self, fragment: str, suffix: str = ".csv") -> list[ExportPath]:
         needle = fragment.casefold()
         return [
             path
@@ -731,7 +782,7 @@ def _assemble_source_records(root: Path) -> SourceRecordCatalog:
     relationship_paths = files.named("CustomerRelationshipIndex")
     if relationship_paths:
         recognized = True
-    relationship_rows = list(_csv_rows(root, relationship_paths))
+    relationship_rows = list(_csv_rows(files.root, relationship_paths))
     for source_path, row in relationship_rows:
         if clean(row.get("Resource Type")).casefold() != "item":
             continue
@@ -780,7 +831,7 @@ def _assemble_source_records(root: Path) -> SourceRecordCatalog:
     book_relation_paths = files.named("BookRelation.csv")
     if book_relation_paths:
         recognized = True
-    for _, row in _csv_rows(root, book_relation_paths):
+    for _, row in _csv_rows(files.root, book_relation_paths):
         if not clean(row.get("Product Name")):
             continue
         for record in catalog.records_for_asin(row.get("ASIN")):
@@ -790,7 +841,7 @@ def _assemble_source_records(root: Path) -> SourceRecordCatalog:
     document_paths = files.named("DocumentMetadata")
     if document_paths:
         recognized = True
-    for _, row in _csv_rows(root, document_paths):
+    for _, row in _csv_rows(files.root, document_paths):
         document = catalog.document(row.get("DocumentId"))
         if document:
             document.default = is_default_personal_document(row)
@@ -801,7 +852,7 @@ def _assemble_source_records(root: Path) -> SourceRecordCatalog:
     saga_paths = files.named("CollectionRightsDatastore")
     if saga_paths:
         recognized = True
-    for _, row in _csv_rows(root, saga_paths):
+    for _, row in _csv_rows(files.root, saga_paths):
         if clean(row.get("record-type")).casefold() != "item":
             continue
         item_asin = clean_item_asin(row.get("item-ASIN"))

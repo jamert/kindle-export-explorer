@@ -10,7 +10,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Iterator
 
-from .books import CanonicalKey, ExportError, ExportFiles, clean
+from .books import CanonicalKey, ExportError, ExportFiles, ExportPath, clean
 
 
 # Canonical acquisition model
@@ -76,9 +76,6 @@ class BookAcquisition:
 def reconstruct_acquisitions(root: Path) -> list[BookAcquisition]:
     """Return acquisition timelines reconstructed from *root*."""
     root = root.expanduser()
-    if not root.is_dir():
-        raise ExportError(f"not a directory: {root}")
-
     catalog = _assemble_acquisition_records(root)
     result: list[BookAcquisition] = []
     for group in catalog.kindle_groups():
@@ -287,7 +284,7 @@ def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
     return catalog
 
 
-def _csv_rows(paths: list[Path]) -> Iterator[dict[str, str]]:
+def _csv_rows(paths: list[ExportPath]) -> Iterator[dict[str, str]]:
     for path in paths:
         try:
             with path.open(encoding="utf-8-sig", newline="") as stream:

@@ -8,7 +8,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Iterator
 
-from .books import CanonicalKey, ExportError, ExportFiles, clean
+from .books import CanonicalKey, ExportError, ExportFiles, ExportPath, clean
 
 
 # Per-book reading record collection
@@ -101,9 +101,6 @@ class BookReading:
 def reconstruct_reading(root: Path) -> list[BookReading]:
     """Collect reading records grouped by canonical book key."""
     root = root.expanduser()
-    if not root.is_dir():
-        raise ExportError(f"not a directory: {root}")
-
     catalog = _assemble_reading_records(root)
     return sorted(catalog.records(), key=lambda reading: str(reading.key))
 
@@ -377,7 +374,7 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
     return catalog
 
 
-def _csv_rows(paths: list[Path]) -> Iterator[dict[str, str]]:
+def _csv_rows(paths: list[ExportPath]) -> Iterator[dict[str, str]]:
     for path in paths:
         try:
             with path.open(encoding="utf-8-sig", newline="") as stream:

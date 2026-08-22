@@ -16,7 +16,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TextIO
 
-from kindle_export_explorer.books import clean, normalize_sharded_path
+from kindle_export_explorer.books import (
+    ExportFiles,
+    ExportPath,
+    clean,
+    normalize_sharded_path,
+)
 
 
 LOW_CARDINALITY_LIMIT = 10
@@ -105,7 +110,7 @@ def _flatten_json(value: object, prefix: str = "") -> dict[str, list[object]]:
     return result
 
 
-def _csv_records(path: Path) -> Iterator[dict[str, list[object]]]:
+def _csv_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
     with path.open(encoding="utf-8-sig", newline="") as stream:
         reader = csv.reader(stream)
         try:
@@ -125,7 +130,7 @@ def _csv_records(path: Path) -> Iterator[dict[str, list[object]]]:
             yield {name: [padded[index]] for index, name in enumerate(names)}
 
 
-def _json_records(path: Path) -> Iterator[dict[str, list[object]]]:
+def _json_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
     with path.open(encoding="utf-8-sig") as stream:
         data = json.load(stream)
     records = data if isinstance(data, list) else [data]
@@ -137,18 +142,16 @@ def _json_records(path: Path) -> Iterator[dict[str, list[object]]]:
 
 
 def profile_export(root: Path) -> list[DatasetProfile]:
-    """Profile supported files under *root*; silently ignore other file types."""
-    root = root.expanduser().resolve()
-    if not root.is_dir():
-        raise ValueError(f"not a directory: {root}")
+    """Profile supported files in a directory or ZIP archive."""
+    files = ExportFiles(root.expanduser().resolve())
 
     profiles: dict[str, DatasetProfile] = {}
-    for path in sorted(item for item in root.rglob("*") if item.is_file()):
-        relative = path.relative_to(root).as_posix()
+    for path in files:
+        relative = files.relative(path)
         suffix = path.suffix.casefold()
         if suffix not in {".csv", ".json"}:
             continue
-        normalized = normalize_sharded_path(root, path)
+        normalized = normalize_sharded_path(files.root, path)
         profile = profiles.setdefault(normalized, DatasetProfile(normalized))
         profile.physical_files.add(relative)
         records = _csv_records(path) if suffix == ".csv" else _json_records(path)
@@ -262,7 +265,9 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("export_directory", type=Path)
+    parser.add_argument(
+        "export_path", type=Path, help="Kindle directory or ZIP archive"
+    )
     parser.add_argument(
         "-o", "--output", type=Path, help="Write Markdown to this file instead of stdout"
     )
@@ -272,7 +277,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        profiles = profile_export(args.export_directory)
+        profiles = profile_export(args.export_path)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open("w", encoding="utf-8") as stream:

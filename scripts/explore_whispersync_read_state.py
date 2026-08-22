@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Iterator
 
-from kindle_export_explorer.books import ExportFiles, clean
+from kindle_export_explorer.books import ExportFiles, ExportPath, clean
 
 
 _ANNOTATION_TYPES = (
@@ -20,17 +20,19 @@ _ANNOTATION_TYPES = (
 )
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("export_directory", type=Path)
+    parser.add_argument(
+        "export_path", type=Path, help="Kindle directory or ZIP archive"
+    )
     parser.add_argument(
         "--active-only",
         action="store_true",
         help="Exclude rows exported as deleted tombstones.",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
-    root = args.export_directory.expanduser().resolve()
+    root = args.export_path.expanduser().resolve()
     paths = ExportFiles(root).named("whispersync")
     if not paths:
         parser.error(f"no Whispersync CSV found in {root}")
@@ -78,7 +80,7 @@ def main() -> None:
         )
 
 
-def _csv_rows(paths: list[Path]) -> Iterator[dict[str, str]]:
+def _csv_rows(paths: list[ExportPath]) -> Iterator[dict[str, str]]:
     for path in paths:
         with path.open(encoding="utf-8-sig", newline="") as stream:
             yield from csv.DictReader(stream)

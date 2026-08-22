@@ -33,22 +33,22 @@ _OMITTED_RECORD_FIELDS = {
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.argument("canonical_key")
 @click.argument(
-    "export_directory",
-    type=click.Path(path_type=Path, exists=True, file_okay=False, resolve_path=True),
+    "export_path",
+    type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
-def reading(canonical_key: str, export_directory: Path) -> None:
-    """Print reading records for CANONICAL_KEY from EXPORT_DIRECTORY as JSON."""
+def reading(canonical_key: str, export_path: Path) -> None:
+    """Print records for CANONICAL_KEY from directory or ZIP EXPORT_PATH."""
     key = _parse_canonical_key(canonical_key)
     try:
         reading = next(
-            (item for item in reconstruct_reading(export_directory) if item.key == key),
+            (item for item in reconstruct_reading(export_path) if item.key == key),
             None,
         )
         book = next(
             (
                 item
                 for item in reconstruct_books(
-                    export_directory,
+                    export_path,
                     show_default=True,
                     show_samples=True,
                     source="all",
