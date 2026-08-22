@@ -12,6 +12,7 @@ import click
 
 from ..books import CanonicalKey, ExportError, reconstruct_books
 from ..formatting import format_datetime
+from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
 
 
@@ -34,10 +35,18 @@ _OMITTED_RECORD_FIELDS = {
 @click.argument("canonical_key")
 @click.argument(
     "export_path",
+    required=False,
     type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
-def reading(canonical_key: str, export_path: Path) -> None:
-    """Print records for CANONICAL_KEY from directory or ZIP EXPORT_PATH."""
+def reading(canonical_key: str, export_path: Path | None) -> None:
+    """Print CANONICAL_KEY records from directory or ZIP EXPORT_PATH.
+
+    EXPORT_PATH defaults to the KINDLE_EXPORT_PATH environment variable.
+    """
+    try:
+        export_path = resolve_export_path(export_path)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
     key = _parse_canonical_key(canonical_key)
     try:
         reading = next(

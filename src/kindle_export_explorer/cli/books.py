@@ -19,6 +19,7 @@ from ..books import (
     reconstruct_books,
 )
 from ..formatting import format_datetime
+from ..paths import resolve_export_path
 from .utils import parse_identifiers, select_books
 
 
@@ -70,10 +71,11 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 )
 @click.argument(
     "export_path",
+    required=False,
     type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
 def books(
-    export_path: Path,
+    export_path: Path | None,
     show_default: bool,
     show_samples: bool,
     source: str,
@@ -83,7 +85,14 @@ def books(
     include: str | None,
     exclude: str | None,
 ) -> None:
-    """Print canonical books reconstructed from directory or ZIP EXPORT_PATH."""
+    """Print books from directory or ZIP EXPORT_PATH.
+
+    EXPORT_PATH defaults to the KINDLE_EXPORT_PATH environment variable.
+    """
+    try:
+        export_path = resolve_export_path(export_path)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
     requested_ids = parse_identifiers(include, "--include")
 
     try:

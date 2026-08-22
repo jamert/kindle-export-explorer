@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Iterator
 
 from kindle_export_explorer.books import ExportFiles, ExportPath, clean
+from kindle_export_explorer.paths import resolve_export_path
 
 
 _ANNOTATION_TYPES = (
@@ -23,7 +24,10 @@ _ANNOTATION_TYPES = (
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "export_path", type=Path, help="Kindle directory or ZIP archive"
+        "export_path",
+        nargs="?",
+        type=Path,
+        help="Kindle directory or ZIP archive (or set KINDLE_EXPORT_PATH)",
     )
     parser.add_argument(
         "--active-only",
@@ -32,7 +36,10 @@ def main(argv: list[str] | None = None) -> None:
     )
     args = parser.parse_args(argv)
 
-    root = args.export_path.expanduser().resolve()
+    try:
+        root = resolve_export_path(args.export_path)
+    except ValueError as exc:
+        parser.error(str(exc))
     paths = ExportFiles(root).named("whispersync")
     if not paths:
         parser.error(f"no Whispersync CSV found in {root}")

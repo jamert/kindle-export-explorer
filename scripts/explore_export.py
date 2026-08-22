@@ -22,6 +22,7 @@ from kindle_export_explorer.books import (
     clean,
     normalize_sharded_path,
 )
+from kindle_export_explorer.paths import resolve_export_path
 
 
 LOW_CARDINALITY_LIMIT = 10
@@ -266,7 +267,10 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "export_path", type=Path, help="Kindle directory or ZIP archive"
+        "export_path",
+        nargs="?",
+        type=Path,
+        help="Kindle directory or ZIP archive (or set KINDLE_EXPORT_PATH)",
     )
     parser.add_argument(
         "-o", "--output", type=Path, help="Write Markdown to this file instead of stdout"
@@ -277,7 +281,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
-        profiles = profile_export(args.export_path)
+        export_path = resolve_export_path(args.export_path)
+        profiles = profile_export(export_path)
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             with args.output.open("w", encoding="utf-8") as stream:

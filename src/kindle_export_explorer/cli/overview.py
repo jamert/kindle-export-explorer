@@ -14,6 +14,7 @@ import click
 from ..acquisitions import BookAcquisition, reconstruct_acquisitions
 from ..books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstruct_books
 from ..formatting import format_datetime
+from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
 from .utils import parse_identifiers, select_books
 
@@ -50,15 +51,23 @@ _OVERVIEW_HEADERS = (
 )
 @click.argument(
     "export_path",
+    required=False,
     type=click.Path(path_type=Path, exists=True, resolve_path=True),
 )
 def overview(
-    export_path: Path,
+    export_path: Path | None,
     json_lines: bool,
     include: str | None,
     exclude: str | None,
 ) -> None:
-    """Print an overview from a Kindle export directory or ZIP archive."""
+    """Print an overview from directory or ZIP EXPORT_PATH.
+
+    EXPORT_PATH defaults to the KINDLE_EXPORT_PATH environment variable.
+    """
+    try:
+        export_path = resolve_export_path(export_path)
+    except ValueError as exc:
+        raise click.UsageError(str(exc)) from exc
     included_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
     try:

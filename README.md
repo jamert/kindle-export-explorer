@@ -32,6 +32,16 @@ the results are identical and the archive is read directly without extraction:
 uv run kindle-export-explorer books /path/to/Kindle.zip > books.tsv
 ```
 
+Set `KINDLE_EXPORT_PATH` to omit the path from CLI commands and exploration
+scripts. An explicit argument always takes priority over the environment variable:
+
+```console
+export KINDLE_EXPORT_PATH="$HOME/Downloads/Kindle.zip"
+uv run kindle-export-explorer books > books.tsv
+uv run kindle-export-explorer overview > kindle-overview.tsv
+uv run python scripts/explore_export.py -o data-profile.md
+```
+
 The default TSV fields are:
 
 ```text

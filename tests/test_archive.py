@@ -5,9 +5,11 @@ from contextlib import redirect_stdout
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
+import pytest
 from click.testing import CliRunner
 
 from kindle_export_explorer.cli import main
+from scripts.explore_export import main as explore_main
 from scripts.explore_export import profile_export
 from scripts.explore_whispersync_read_state import main as whispersync_main
 
@@ -100,3 +102,56 @@ def test_all_commands_and_exploration_match_directory_and_archive(tmp_path: Path
     with redirect_stdout(archive_output):
         whispersync_main([str(archive)])
     assert archive_output.getvalue() == directory_output.getvalue()
+
+
+def test_environment_path_and_explicit_path_priority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = tmp_path / "Kindle"
+    root.mkdir()
+    _make_export(root)
+    archive = tmp_path / "Kindle.zip"
+    _archive_directory(root, archive)
+    missing = tmp_path / "missing.zip"
+
+    runner = CliRunner()
+    commands = [
+        ["books", "--acquisition"],
+        ["overview"],
+        ["reading", "asin:BOOK1"],
+    ]
+    for command in commands:
+        expected = runner.invoke(main, [*command, str(root)])
+        from_environment = runner.invoke(
+            main,
+            command,
+            env={"KINDLE_EXPORT_PATH": str(archive)},
+        )
+        explicit_override = runner.invoke(
+            main,
+            [*command, str(root)],
+            env={"KINDLE_EXPORT_PATH": str(missing)},
+        )
+        assert expected.exit_code == 0, expected.output
+        assert from_environment.exit_code == 0, from_environment.output
+        assert explicit_override.exit_code == 0, explicit_override.output
+        assert from_environment.output == expected.output
+        assert explicit_override.output == expected.output
+
+    absent = runner.invoke(main, ["books"])
+    assert absent.exit_code == 2
+    assert "KINDLE_EXPORT_PATH" in absent.output
+
+    for script in (explore_main, whispersync_main):
+        monkeypatch.setenv("KINDLE_EXPORT_PATH", str(missing))
+        explicit_output = io.StringIO()
+        with redirect_stdout(explicit_output):
+            result = script([str(root)])
+        assert result in {None, 0}
+
+        monkeypatch.setenv("KINDLE_EXPORT_PATH", str(archive))
+        environment_output = io.StringIO()
+        with redirect_stdout(environment_output):
+            result = script([])
+        assert result in {None, 0}
+        assert environment_output.getvalue() == explicit_output.getvalue()
