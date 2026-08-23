@@ -92,8 +92,13 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
 
     acquisitions = reconstruct_acquisitions(tmp_path)
     by_key = {str(acquisition.key): acquisition for acquisition in acquisitions}
+    selected = reconstruct_acquisitions(
+        tmp_path,
+        predicate=lambda key: key.document_id == "DOC",
+    )
 
     assert set(by_key) == {"asin:BOOK", "asin:PRINT", "document:DOC"}
+    assert [str(acquisition.key) for acquisition in selected] == ["document:DOC"]
     assert [event.type for event in by_key["asin:BOOK"].events] == [
         AcquisitionEventType.SAMPLE_ACQUIRED,
         AcquisitionEventType.KINDLE_PURCHASED,

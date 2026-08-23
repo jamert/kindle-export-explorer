@@ -14,6 +14,7 @@ from ..books import CanonicalKey, ExportError, reconstruct_books
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
+from .utils import keys_predicate
 
 
 _OMITTED_RECORD_FIELDS = {
@@ -48,21 +49,21 @@ def reading(canonical_key: str, export_path: Path | None) -> None:
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
     key = _parse_canonical_key(canonical_key)
+    predicate = keys_predicate({key})
     try:
         reading = next(
-            (item for item in reconstruct_reading(export_path) if item.key == key),
+            iter(reconstruct_reading(export_path, predicate=predicate)),
             None,
         )
         book = next(
-            (
-                item
-                for item in reconstruct_books(
+            iter(
+                reconstruct_books(
                     export_path,
                     show_default=True,
                     show_samples=True,
                     source="all",
+                    predicate=predicate,
                 )
-                if item.key == key
             ),
             None,
         )

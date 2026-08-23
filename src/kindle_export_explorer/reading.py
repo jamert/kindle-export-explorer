@@ -6,9 +6,16 @@ import csv
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
-from .books import CanonicalKey, ExportError, ExportFiles, ExportPath, clean
+from .books import (
+    CanonicalKey,
+    CanonicalKeyPredicate,
+    ExportError,
+    ExportFiles,
+    ExportPath,
+    clean,
+)
 
 
 # Per-book reading record collection
@@ -98,10 +105,14 @@ class BookReading:
 
 # Public reconstruction pipeline
 
-def reconstruct_reading(root: Path) -> list[BookReading]:
-    """Collect reading records grouped by canonical book key."""
+def reconstruct_reading(
+    root: Path,
+    *,
+    predicate: CanonicalKeyPredicate | None = None,
+) -> list[BookReading]:
+    """Collect records selected by a predicate applied while rows are read."""
     root = root.expanduser()
-    catalog = _assemble_reading_records(root)
+    catalog = _assemble_reading_records(root, predicate or _accept_key)
     return sorted(catalog.records(), key=lambda reading: str(reading.key))
 
 
@@ -238,14 +249,24 @@ _READING_ANNOTATION_TYPES = {
 }
 
 
-def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
+def _accept_key(key: CanonicalKey) -> bool:
+    return True
+
+
+def _assemble_reading_records(
+    root: Path,
+    predicate: CanonicalKeyPredicate,
+) -> ReadingSourceCatalog:
     catalog = ReadingSourceCatalog()
     files = ExportFiles(root)
     recognized = False
 
     paths = files.named("Kindle.Devices.ReadingSession")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_asin_selected(row, "ASIN", predicate),
+    ):
         asin = clean(row.get("ASIN"))
         content_type = clean(row.get("content_type"))
         if not asin or content_type not in {"E-Book", "E-Book Sample"}:
@@ -268,7 +289,10 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
 
     paths = files.named("reading-insights-sessions_with_adjustments")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_asin_selected(row, "ASIN", predicate),
+    ):
         asin = clean(row.get("ASIN"))
         if not asin:
             continue
@@ -288,7 +312,10 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
 
     paths = files.named("whispersync")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_key_selected(row, predicate),
+    ):
         key = _whispersync_key(row)
         annotation_type = clean(row.get("Annotation Type"))
         if key is None or annotation_type not in _READING_ANNOTATION_TYPES:
@@ -313,7 +340,10 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
 
     paths = files.named("ReadingActionsContainers")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_asin_selected(row, "ASIN", predicate),
+    ):
         asin = clean(row.get("ASIN"))
         if not asin:
             continue
@@ -334,7 +364,10 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
 
     paths = files.named("autoMarkAsRead")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_asin_selected(row, "active_ASIN", predicate),
+    ):
         asin = clean(row.get("active_ASIN"))
         if not asin:
             continue
@@ -354,7 +387,10 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
 
     paths = files.named("UserUniqueTitlesCompleted")
     recognized |= bool(paths)
-    for row in _csv_rows(paths):
+    for row in _csv_rows(
+        paths,
+        lambda row: _row_completion_selected(row, predicate),
+    ):
         parsed = _parse_completion_key(row.get("asin_date_and_content_type"))
         if parsed is None:
             continue
@@ -374,13 +410,43 @@ def _assemble_reading_records(root: Path) -> ReadingSourceCatalog:
     return catalog
 
 
-def _csv_rows(paths: list[ExportPath]) -> Iterator[dict[str, str]]:
+def _csv_rows(
+    paths: list[ExportPath],
+    predicate: Callable[[dict[str, str]], bool] | None = None,
+) -> Iterator[dict[str, str]]:
     for path in paths:
         try:
             with path.open(encoding="utf-8-sig", newline="") as stream:
-                yield from csv.DictReader(stream)
+                for row in csv.DictReader(stream):
+                    if predicate is None or predicate(row):
+                        yield row
         except (OSError, UnicodeError, csv.Error) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
+
+
+def _row_asin_selected(
+    row: dict[str, str],
+    column: str,
+    predicate: CanonicalKeyPredicate,
+) -> bool:
+    asin = clean(row.get(column))
+    return bool(asin) and predicate(CanonicalKey(asin=asin))
+
+
+def _row_key_selected(
+    row: dict[str, str],
+    predicate: CanonicalKeyPredicate,
+) -> bool:
+    key = _whispersync_key(row)
+    return key is not None and predicate(key)
+
+
+def _row_completion_selected(
+    row: dict[str, str],
+    predicate: CanonicalKeyPredicate,
+) -> bool:
+    parsed = _parse_completion_key(row.get("asin_date_and_content_type"))
+    return parsed is not None and predicate(CanonicalKey(asin=parsed[0]))
 
 
 def _whispersync_key(row: dict[str, str]) -> CanonicalKey | None:

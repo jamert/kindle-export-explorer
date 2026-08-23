@@ -242,8 +242,13 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
 
     readings = reconstruct_reading(tmp_path)
     by_key = {str(reading.key): reading for reading in readings}
+    selected = reconstruct_reading(
+        tmp_path,
+        predicate=lambda key: key.document_id == "DOC-ID",
+    )
 
     assert set(by_key) == {"asin:BOOK", "document:DOC-ID"}
+    assert [str(reading.key) for reading in selected] == ["document:DOC-ID"]
     book = by_key["asin:BOOK"]
     assert len(book.device_sessions) == 2
     assert book.device_sessions[0].content_type == "E-Book Sample"

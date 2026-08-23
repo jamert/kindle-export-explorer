@@ -452,6 +452,11 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path
     kindle = reconstruct_books(tmp_path)
     printed = reconstruct_books(tmp_path, source="print")
     all_books = reconstruct_books(tmp_path, source="all")
+    selected_books = reconstruct_books(
+        tmp_path,
+        source="all",
+        predicate=lambda key: key.asin == "B0PRINT123",
+    )
     assert [(book.asin, book.ownership_digital) for book in kindle] == [
         ("1234567890", "kindle_ebook")
     ]
@@ -459,6 +464,7 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path
         ("B0PRINT123", True)
     ]
     assert len(all_books) == 2
+    assert [book.asin for book in selected_books] == ["B0PRINT123"]
 
     result = CliRunner().invoke(main, ["--source", "print", str(tmp_path)])
     assert result.exit_code == 0

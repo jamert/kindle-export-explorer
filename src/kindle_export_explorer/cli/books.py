@@ -20,7 +20,7 @@ from ..books import (
 )
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
-from .utils import parse_identifiers, select_books
+from .utils import identifier_predicate, keys_predicate, parse_identifiers
 
 
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
@@ -94,20 +94,26 @@ def books(
     except ValueError as exc:
         raise click.UsageError(str(exc)) from exc
     requested_ids = parse_identifiers(include, "--include")
+    excluded_ids = parse_identifiers(exclude, "--exclude")
+    predicate = identifier_predicate(requested_ids, excluded_ids)
 
     try:
         books = reconstruct_books(
             export_path,
-            # Explicit IDs override all category filters. Exclusion is still
-            # applied below and therefore always wins.
+            # Explicit IDs override all category filters. Exclusion is part of
+            # the predicate and therefore still always wins.
             show_default=True if requested_ids is not None else show_default,
             show_samples=True if requested_ids is not None else show_samples,
             source="all" if requested_ids is not None else source,
+            predicate=predicate,
         )
         acquisition_by_key = (
             {
                 item.key: item
-                for item in reconstruct_acquisitions(export_path)
+                for item in reconstruct_acquisitions(
+                    export_path,
+                    predicate=keys_predicate({book.key for book in books}),
+                )
             }
             if acquisition
             else None
@@ -115,8 +121,6 @@ def books(
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    excluded_ids = parse_identifiers(exclude, "--exclude")
-    books = select_books(books, requested_ids, excluded_ids)
     if json_lines:
         _write_json_lines(books, extra, acquisition_by_key)
     else:

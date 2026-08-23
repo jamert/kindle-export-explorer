@@ -8,9 +8,16 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Iterator
+from typing import Callable, Iterator
 
-from .books import CanonicalKey, ExportError, ExportFiles, ExportPath, clean
+from .books import (
+    CanonicalKey,
+    CanonicalKeyPredicate,
+    ExportError,
+    ExportFiles,
+    ExportPath,
+    clean,
+)
 
 
 # Canonical acquisition model
@@ -73,10 +80,14 @@ class BookAcquisition:
 
 # Public reconstruction pipeline
 
-def reconstruct_acquisitions(root: Path) -> list[BookAcquisition]:
-    """Return acquisition timelines reconstructed from *root*."""
+def reconstruct_acquisitions(
+    root: Path,
+    *,
+    predicate: CanonicalKeyPredicate | None = None,
+) -> list[BookAcquisition]:
+    """Return timelines selected by a predicate applied while rows are read."""
     root = root.expanduser()
-    catalog = _assemble_acquisition_records(root)
+    catalog = _assemble_acquisition_records(root, predicate or _accept_key)
     result: list[BookAcquisition] = []
     for group in catalog.kindle_groups():
         result.append(AcquisitionCanonicalizationService.convert_kindle(*group))
@@ -208,7 +219,14 @@ _ORIGIN_EVENT_TYPES = {
 }
 
 
-def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
+def _accept_key(key: CanonicalKey) -> bool:
+    return True
+
+
+def _assemble_acquisition_records(
+    root: Path,
+    predicate: CanonicalKeyPredicate,
+) -> AcquisitionSourceCatalog:
     catalog = AcquisitionSourceCatalog()
     files = ExportFiles(root)
     recognized = False
@@ -224,7 +242,7 @@ def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
         asin = clean(resource.get("ASIN"))
-        if not asin:
+        if not asin or not predicate(CanonicalKey(asin=asin)):
             continue
         kindle_asins.add(asin)
         for right in data.get("rights", []):
@@ -251,7 +269,10 @@ def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
     relationship_paths = files.named("CustomerRelationshipIndex")
     if relationship_paths:
         recognized = True
-    for row in _csv_rows(relationship_paths):
+    for row in _csv_rows(
+        relationship_paths,
+        lambda row: _row_asin_selected(row, "ASIN", predicate),
+    ):
         if clean(row.get("Resource Type")).casefold() != "item":
             continue
         if clean(row.get("Ownership Type")).casefold() != "item owner":
@@ -269,7 +290,10 @@ def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
     document_paths = files.named("DocumentMetadata")
     if document_paths:
         recognized = True
-    for row in _csv_rows(document_paths):
+    for row in _csv_rows(
+        document_paths,
+        lambda row: _row_document_selected(row, "DocumentId", predicate),
+    ):
         document_id = clean(row.get("DocumentId"))
         if document_id:
             catalog.add_document(
@@ -284,13 +308,36 @@ def _assemble_acquisition_records(root: Path) -> AcquisitionSourceCatalog:
     return catalog
 
 
-def _csv_rows(paths: list[ExportPath]) -> Iterator[dict[str, str]]:
+def _csv_rows(
+    paths: list[ExportPath],
+    predicate: Callable[[dict[str, str]], bool] | None = None,
+) -> Iterator[dict[str, str]]:
     for path in paths:
         try:
             with path.open(encoding="utf-8-sig", newline="") as stream:
-                yield from csv.DictReader(stream)
+                for row in csv.DictReader(stream):
+                    if predicate is None or predicate(row):
+                        yield row
         except (OSError, UnicodeError, csv.Error) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
+
+
+def _row_asin_selected(
+    row: dict[str, str],
+    column: str,
+    predicate: CanonicalKeyPredicate,
+) -> bool:
+    asin = clean(row.get(column))
+    return bool(asin) and predicate(CanonicalKey(asin=asin))
+
+
+def _row_document_selected(
+    row: dict[str, str],
+    column: str,
+    predicate: CanonicalKeyPredicate,
+) -> bool:
+    document_id = clean(row.get(column))
+    return bool(document_id) and predicate(CanonicalKey(document_id=document_id))
 
 
 def _parse_timestamp(value: object) -> datetime | None:

@@ -16,7 +16,7 @@ from ..books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstru
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
-from .utils import parse_identifiers, select_books
+from .utils import identifier_predicate, keys_predicate, parse_identifiers
 
 
 _OVERVIEW_HEADERS = (
@@ -70,21 +70,33 @@ def overview(
         raise click.UsageError(str(exc)) from exc
     included_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
+    predicate = identifier_predicate(included_ids, excluded_ids)
     try:
         books = reconstruct_books(
             export_path,
             show_default=False,
             show_samples=True,
             source="kindle",
+            predicate=predicate,
         )
+        join_predicate = keys_predicate({book.key for book in books})
         acquisitions = {
-            item.key: item for item in reconstruct_acquisitions(export_path)
+            item.key: item
+            for item in reconstruct_acquisitions(
+                export_path,
+                predicate=join_predicate,
+            )
         }
-        readings = {item.key: item for item in reconstruct_reading(export_path)}
+        readings = {
+            item.key: item
+            for item in reconstruct_reading(
+                export_path,
+                predicate=join_predicate,
+            )
+        }
     except ExportError as exc:
         raise click.ClickException(str(exc)) from exc
 
-    books = select_books(books, included_ids, excluded_ids)
     books.sort(key=lambda book: _acquisition_sort_key(book, acquisitions))
     if json_lines:
         _write_json_lines(books, acquisitions, readings)
