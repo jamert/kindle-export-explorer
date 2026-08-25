@@ -200,7 +200,16 @@ uv run python scripts/explore_export.py /path/to/Kindle.zip -o data-profile.md
 
 ## Develop
 
+Install the pre-commit hook after cloning:
+
 ```console
-uv run pytest
-uv run pyright
+uv sync --dev
+uv run pre-commit install
+```
+
+The hook runs the test suite with `KINDLE_EXPORT_PATH` unset and then runs Pyright.
+Run the same checks across the repository manually with:
+
+```console
+uv run pre-commit run --all-files
 ```

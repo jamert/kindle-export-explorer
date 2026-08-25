@@ -1,0 +1,15 @@
+repos:
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: env -u KINDLE_EXPORT_PATH uv run pytest
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: pyright
+        name: pyright
+        entry: uv run pyright
+        language: system
+        pass_filenames: false
+        always_run: true
