@@ -37,6 +37,7 @@ from .reading import (
     WhispersyncRecordSummary,
     reconstruct_reading,
 )
+from .resolutions import ManualResolution, ReadStatus, ResolutionError
 
 
 __all__ = [
@@ -60,10 +61,13 @@ __all__ = [
     "ExportError",
     "KindleAcquisitionRecord",
     "KindleBookRecord",
+    "ManualResolution",
     "PrintAcquisitionRecord",
     "PrintBookRecord",
     "ReadingActionContainerRecord",
     "ReadingInsightsSessionRecord",
+    "ReadStatus",
+    "ResolutionError",
     "Series",
     "TitleCompletionRecord",
     "WhispersyncRecord",

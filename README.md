@@ -24,8 +24,8 @@ Kindle export data are not documented precisely and
 
 ## Run
 
-The unified CLI provides `books`, `overview`, and `reading` subcommands. Every
-command accepts either the original Kindle ZIP archive or an unpacked directory;
+The unified CLI provides `books`, `overview`, `reading`, and `resolve-reading`
+subcommands. Every command accepts either the original Kindle ZIP archive or an unpacked directory;
 the results are identical and the archive is read directly without extraction:
 
 ```console
@@ -65,7 +65,23 @@ use the `reading_ds_` prefix (`reading_ds_start`, `reading_ds_end`, and
 (`reading_ws_start`, `reading_ws_end`, and `reading_ws_dates_unique`). It is ordered by
 full-book acquisition date, using the sample acquisition date when no full-book
 acquisition exists. It supports
-`--include`, `--exclude`, and `--json`.
+`--include`, `--exclude`, and `--json`. Its `read_status` field contains a manual
+resolution when one has been recorded.
+
+Record manual reading status interactively with:
+
+```console
+uv run kindle-export-explorer resolve-reading /path/to/Kindle
+```
+
+Full books are prompted in descending acquisition order. Sample-only records and
+Kindle defaults such as dictionaries and user guides are skipped unless selected
+explicitly with `--include`. Answer `Y`, `N`, `P`, or `U`
+(case-insensitive) for yes, no, partially, or unknown; Enter defaults to unknown.
+Completed records are skipped. Use `--include ID[,ID...]` to select and revisit
+specific records, and `--exclude ID[,ID...]` to omit records. Each answer is immediately written to
+`$XDG_CONFIG_HOME/kindle-export-explorer/resolution.json`, with `~/.config` used
+when `XDG_CONFIG_HOME` is unset.
 
 Use `--extra` to add series title, series ASIN, series position, genres, and
 marketplace-derived links for the book and its series:

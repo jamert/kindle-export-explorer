@@ -16,11 +16,13 @@ from ..books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstru
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
+from ..resolutions import ManualResolution, ResolutionError, load_resolutions
 from .utils import identifier_predicate, keys_predicate, parse_identifiers
 
 
 _OVERVIEW_HEADERS = (
     *HEADERS,
+    "read_status",
     "acquired_sample",
     "acquired_book",
     "reading_ds_start",
@@ -94,14 +96,15 @@ def overview(
                 predicate=join_predicate,
             )
         }
-    except ExportError as exc:
+        resolutions = load_resolutions()
+    except (ExportError, ResolutionError) as exc:
         raise click.ClickException(str(exc)) from exc
 
     books.sort(key=lambda book: _acquisition_sort_key(book, acquisitions))
     if json_lines:
-        _write_json_lines(books, acquisitions, readings)
+        _write_json_lines(books, acquisitions, readings, resolutions)
     else:
-        _write_tsv(books, acquisitions, readings)
+        _write_tsv(books, acquisitions, readings, resolutions)
 
 
 # Output details
@@ -110,6 +113,7 @@ def _write_json_lines(
     books: list[BookCanonical],
     acquisitions: dict[CanonicalKey, BookAcquisition],
     readings: dict[CanonicalKey, BookReading],
+    resolutions: dict[str, ManualResolution],
 ) -> None:
     for book in books:
         record = book.as_dict()
@@ -117,6 +121,7 @@ def _write_json_lines(
             _overview_values(
                 acquisitions.get(book.key),
                 readings.get(book.key),
+                resolutions.get(str(book.key)),
             )
         )
         click.echo(json.dumps(record, ensure_ascii=False))
@@ -126,6 +131,7 @@ def _write_tsv(
     books: list[BookCanonical],
     acquisitions: dict[CanonicalKey, BookAcquisition],
     readings: dict[CanonicalKey, BookReading],
+    resolutions: dict[str, ManualResolution],
 ) -> None:
     writer = csv.writer(sys.stdout, dialect="excel-tab", lineterminator="\n")
     writer.writerow(_OVERVIEW_HEADERS)
@@ -133,6 +139,7 @@ def _write_tsv(
         values = _overview_values(
             acquisitions.get(book.key),
             readings.get(book.key),
+            resolutions.get(str(book.key)),
         )
         writer.writerow(
             [
@@ -148,12 +155,14 @@ def _write_tsv(
 def _overview_values(
     acquisition: BookAcquisition | None,
     reading: BookReading | None,
+    resolution: ManualResolution | None,
 ) -> dict[str, Any]:
     acquired_sample = acquisition.acquired_sample if acquisition else None
     acquired_book = acquisition.acquired_book if acquisition else None
     device_summary = reading.device_sessions_summary if reading else None
     whispersync_summary = reading.whispersync_record_summary if reading else None
     return {
+        "read_status": resolution.resolution.value if resolution else None,
         "acquired_sample": _timestamp(acquired_sample),
         "acquired_book": _timestamp(acquired_book),
         "reading_ds_start": _timestamp(

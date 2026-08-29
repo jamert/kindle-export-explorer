@@ -5,6 +5,7 @@ import click
 from .books import books
 from .overview import overview
 from .reading import reading
+from .resolve_reading import resolve_reading
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]})
@@ -15,6 +16,7 @@ def main() -> None:
 main.add_command(books)
 main.add_command(overview)
 main.add_command(reading)
+main.add_command(resolve_reading)
 
 
-__all__ = ["books", "main", "overview", "reading"]
+__all__ = ["books", "main", "overview", "reading", "resolve_reading"]

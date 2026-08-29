@@ -10,3 +10,4 @@ def test_unified_cli_exposes_all_commands() -> None:
     assert "books" in result.output
     assert "overview" in result.output
     assert "reading" in result.output
+    assert "resolve-reading" in result.output
