@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from ..acquisitions import BookAcquisition, reconstruct_acquisitions
-from ..books import BookCanonical, CanonicalKey, ExportError, reconstruct_books
+from ..books import BookCanonical, ExportError, reconstruct_books
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..resolutions import (

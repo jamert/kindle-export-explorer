@@ -14,7 +14,7 @@ import sys
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TextIO
+from typing import TextIO, cast
 
 from kindle_export_explorer.books import (
     ExportFiles,
@@ -63,8 +63,8 @@ class ColumnProfile:
 
     value_count: int = 0
     populated_records: int = 0
-    values: set[str] = field(default_factory=set)
-    examples: list[str] = field(default_factory=list)
+    values: set[str] = field(default_factory=lambda: set())
+    examples: list[str] = field(default_factory=lambda: [])
 
     def add_record_values(self, values: Iterable[object]) -> None:
         nonempty = [value for value in (clean(value) for value in values) if value]
@@ -83,9 +83,9 @@ class DatasetProfile:
     """Statistics for all records represented by one normalized source path."""
 
     path: str
-    physical_files: set[str] = field(default_factory=set)
+    physical_files: set[str] = field(default_factory=lambda: set())
     record_count: int = 0
-    columns: dict[str, ColumnProfile] = field(default_factory=dict)
+    columns: dict[str, ColumnProfile] = field(default_factory=lambda: {})
 
     def add_record(self, record: dict[str, list[object]]) -> None:
         self.record_count += 1
@@ -97,13 +97,15 @@ def _flatten_json(value: object, prefix: str = "") -> dict[str, list[object]]:
     """Flatten a JSON record while preserving repeated values from arrays."""
     result: dict[str, list[object]] = {}
     if isinstance(value, dict):
-        for name, child in value.items():
+        mapping = cast(dict[str, object], value)
+        for name, child in mapping.items():
             child_prefix = f"{prefix}.{name}" if prefix else name
             for column, values in _flatten_json(child, child_prefix).items():
                 result.setdefault(column, []).extend(values)
     elif isinstance(value, list):
+        items = cast(list[object], value)
         list_prefix = f"{prefix}[]"
-        for child in value:
+        for child in items:
             for column, values in _flatten_json(child, list_prefix).items():
                 result.setdefault(column, []).extend(values)
     elif prefix:
@@ -133,11 +135,11 @@ def _csv_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
 
 def _json_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
     with path.open(encoding="utf-8-sig") as stream:
-        data = json.load(stream)
-    records = data if isinstance(data, list) else [data]
+        data = cast(object, json.load(stream))
+    records: list[object] = cast(list[object], data) if isinstance(data, list) else [data]
     for record in records:
         if isinstance(record, dict):
-            yield _flatten_json(record)
+            yield _flatten_json(cast(dict[str, object], record))
         else:
             yield {"<value>": [record]}
 

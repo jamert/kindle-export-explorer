@@ -26,4 +26,13 @@ dev = [
 pythonpath = ["."]
 
 [tool.pyright]
-typeCheckingMode = "standard"
+typeCheckingMode = "strict"
+# Pyright's type propagation through dataclasses.field requires contextually typed
+# lambdas instead of bare collection factories (for example, lambda: [] vs. list).
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+    "**/.venv",
+    "scratch",
+]

@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterator
+from typing import Callable, Iterator, cast
 
 from .books import (
     CanonicalKey,
@@ -237,22 +237,32 @@ def _assemble_acquisition_records(
         recognized = True
     for path in ownership_paths:
         try:
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
-            resource = data.get("resource", {})
+            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
+            if not isinstance(value, dict):
+                raise AttributeError("expected a JSON object")
+            data = cast(dict[str, object], value)
+            resource_value = data.get("resource", {})
+            if not isinstance(resource_value, dict):
+                raise AttributeError("resource must be an object")
+            resource = cast(dict[str, object], resource_value)
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
         asin = clean(resource.get("ASIN"))
         if not asin or not predicate(CanonicalKey(asin=asin)):
             continue
         kindle_asins.add(asin)
-        for right in data.get("rights", []):
-            if not isinstance(right, dict):
+        rights_value = data.get("rights", [])
+        rights = cast(list[object], rights_value) if isinstance(rights_value, list) else []
+        for right_value in rights:
+            if not isinstance(right_value, dict):
                 continue
+            right = cast(dict[str, object], right_value)
             if clean(right.get("rightType")).casefold() != "download":
                 continue
-            origin = right.get("origin", {})
-            if not isinstance(origin, dict):
+            origin_value = right.get("origin", {})
+            if not isinstance(origin_value, dict):
                 continue
+            origin = cast(dict[str, object], origin_value)
             event_type = _ORIGIN_EVENT_TYPES.get(
                 clean(origin.get("originType")).casefold()
             )

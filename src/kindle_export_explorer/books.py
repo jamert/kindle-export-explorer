@@ -348,15 +348,15 @@ class BookMetadata:
     """
 
     title: str
-    authors: list[str] = field(default_factory=list)
-    author_asins: list[str] = field(default_factory=list)
-    genres: set[str] = field(default_factory=set)
+    authors: list[str] = field(default_factory=lambda: [])
+    author_asins: list[str] = field(default_factory=lambda: [])
+    genres: set[str] = field(default_factory=lambda: set())
     series_title: str | None = None
     series_position: int | None = None
     series_asin: str | None = None
     sortable_title: str | None = None
     sortable_author: str | None = None
-    marketplaces: set[str] = field(default_factory=set)
+    marketplaces: set[str] = field(default_factory=lambda: set())
     _title_rank: int = field(default=-1, repr=False)
     _series_rank: int = field(default=-1, repr=False)
 
@@ -666,7 +666,7 @@ def _partitioned_dataset_path(root: ExportPath, path: ExportPath) -> str | None:
     if not match or item.parent.name != item.stem:
         return None
     base = match.group("base")
-    matching_files = []
+    matching_files: list[ExportPath] = []
     for directory in item.parent.parent.iterdir():
         directory_match = _VERSIONED_DATASET.match(directory.name)
         if not directory.is_dir() or not directory_match:
@@ -843,19 +843,34 @@ def _assemble_source_records(
         recognized = True
     for path in ownership_files:
         try:
-            data = json.loads(path.read_text(encoding="utf-8-sig"))
-            resource = data.get("resource", {})
+            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
+            if not isinstance(value, dict):
+                raise AttributeError("expected a JSON object")
+            data = cast(dict[str, object], value)
+            resource_value = data.get("resource", {})
+            if not isinstance(resource_value, dict):
+                raise AttributeError("resource must be an object")
+            resource = cast(dict[str, object], resource_value)
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
         asin = _clean_identifier(resource.get("ASIN"))
         if not asin or not predicate(CanonicalKey(asin=asin)):
             continue
-        rights = [right for right in data.get("rights", []) if isinstance(right, dict)]
-        origins = {
-            clean(right.get("origin", {}).get("originType")).casefold()
-            for right in rights
-            if isinstance(right.get("origin"), dict)
-        }
+        rights_value = data.get("rights", [])
+        rights_items = (
+            cast(list[object], rights_value) if isinstance(rights_value, list) else []
+        )
+        rights = [
+            cast(dict[str, object], right)
+            for right in rights_items
+            if isinstance(right, dict)
+        ]
+        origins: set[str] = set()
+        for right in rights:
+            origin_value = right.get("origin")
+            if isinstance(origin_value, dict):
+                origin = cast(dict[str, object], origin_value)
+                origins.add(clean(origin.get("originType")).casefold())
         is_sample_resource = (
             clean(resource.get("resourceType")).casefold() == "kindleebooksample"
             or "sample" in origins

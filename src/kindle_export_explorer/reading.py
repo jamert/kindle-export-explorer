@@ -40,16 +40,20 @@ class WhispersyncRecordSummary:
 @dataclass
 class BookReading:
     key: CanonicalKey
-    device_sessions: list[DeviceReadingSessionRecord] = field(default_factory=list)
-    insights_sessions: list[ReadingInsightsSessionRecord] = field(default_factory=list)
-    whispersync_records: list[WhispersyncRecord] = field(default_factory=list)
+    device_sessions: list[DeviceReadingSessionRecord] = field(default_factory=lambda: [])
+    insights_sessions: list[ReadingInsightsSessionRecord] = field(
+        default_factory=lambda: []
+    )
+    whispersync_records: list[WhispersyncRecord] = field(default_factory=lambda: [])
     reading_action_containers: list[ReadingActionContainerRecord] = field(
-        default_factory=list
+        default_factory=lambda: []
     )
     auto_mark_as_read_records: list[AutoMarkAsReadRecord] = field(
-        default_factory=list
+        default_factory=lambda: []
     )
-    completion_records: list[TitleCompletionRecord] = field(default_factory=list)
+    completion_records: list[TitleCompletionRecord] = field(
+        default_factory=lambda: []
+    )
 
     @property
     def device_sessions_summary(self) -> DeviceSessionsSummary | None:

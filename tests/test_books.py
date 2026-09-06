@@ -88,7 +88,7 @@ def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path)
     )
 
     datasets = tmp_path / "datasets"
-    partition_paths = []
+    partition_paths: list[Path] = []
     versions = (f"{major}.{minor}" for major, minor in zip(range(3), range(10, 13)))
     for version in versions:
         directory = datasets / f"CustomerAuthor.{version}"

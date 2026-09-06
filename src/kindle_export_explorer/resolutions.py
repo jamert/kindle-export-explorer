@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
+from typing import cast
 
 from .formatting import format_datetime
 
@@ -47,21 +48,25 @@ def load_resolutions(path: Path | None = None) -> dict[str, ManualResolution]:
     if not resolved_path.exists():
         return {}
     try:
-        value = json.loads(resolved_path.read_text(encoding="utf-8"))
+        value = cast(
+            object, json.loads(resolved_path.read_text(encoding="utf-8"))
+        )
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ResolutionError(f"cannot read {resolved_path}: {exc}") from exc
     if not isinstance(value, list):
         raise ResolutionError(f"cannot read {resolved_path}: expected a JSON array")
 
+    items = cast(list[object], value)
     result: dict[str, ManualResolution] = {}
-    for index, item in enumerate(value):
+    for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise ResolutionError(
                 f"cannot read {resolved_path}: record {index} must be an object"
             )
-        key = item.get("key")
-        resolution_value = item.get("resolution")
-        updated_at_value = item.get("updated_at")
+        record = cast(dict[str, object], item)
+        key = record.get("key")
+        resolution_value = record.get("resolution")
+        updated_at_value = record.get("updated_at")
         if not isinstance(key, str) or not key:
             raise ResolutionError(
                 f"cannot read {resolved_path}: record {index} has an invalid key"
