@@ -22,9 +22,6 @@ dev = [
     "pytest>=9.1.1",
 ]
 
-[tool.pytest.ini_options]
-pythonpath = ["."]
-
 [tool.pyright]
 typeCheckingMode = "strict"
 # Pyright's type propagation through dataclasses.field requires contextually typed
@@ -35,4 +32,18 @@ exclude = [
     "**/.*",
     "**/.venv",
     "scratch",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
+[tool.kindle-export-explorer.file-io-boundaries]
+source-roots = ["src/kindle_export_explorer"]
+allowed-reads = [
+    "kindle_export_explorer.acquisitions:reconstruct_acquisitions",
+    "kindle_export_explorer.books:ExportFiles.__init__",
+    "kindle_export_explorer.books:normalize_sharded_path",
+    "kindle_export_explorer.books:reconstruct_books",
+    "kindle_export_explorer.reading:reconstruct_reading",
+    "kindle_export_explorer.resolutions:load_resolutions",
 ]

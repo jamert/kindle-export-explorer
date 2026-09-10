@@ -2,6 +2,17 @@ from pathlib import Path
 
 import pytest
 
+from tests.plugins.file_io_boundaries import FileIOBoundaryPlugin
+
+
+_FILE_IO_PLUGIN = FileIOBoundaryPlugin.from_path(
+    Path(__file__).parents[1] / "pyproject.toml"
+)
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.pluginmanager.register(_FILE_IO_PLUGIN, "file-io-boundary-guard")
+
 
 @pytest.fixture(autouse=True)
 def isolate_application_paths(
