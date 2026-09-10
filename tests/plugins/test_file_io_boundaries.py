@@ -1,4 +1,8 @@
+import io
+import sys
 from pathlib import Path
+
+import pytest
 
 from tests.plugins.file_io_boundaries import (
     ApplicationFrame,
@@ -76,6 +80,31 @@ allowed-reads = []
     configuration = FileIOConfiguration.load(path)
 
     assert configuration.allowed_writes == frozenset()
+
+
+def test_monitors_arbitrary_standard_input_reads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sys, "stdin", io.StringIO("abc\ndef\n"))
+    guard = FileIOBoundaryPlugin(
+        FileIOConfiguration(
+            source_roots=(Path(__file__).parent,),
+            allowed_reads=frozenset(),
+        )
+    )
+
+    guard.install()
+    try:
+        assert sys.stdin.read(1) == "a"
+        assert sys.stdin.readline() == "bc\n"
+        assert next(sys.stdin) == "def\n"
+        monkeypatch.setattr(sys, "stdin", io.StringIO("ghi\n"))
+        assert input() == "ghi"
+    finally:
+        guard.disable()
+
+    assert sum(guard.violations.values()) == 4
+    assert {violation.path for violation in guard.violations} == {"stdin"}
 
 
 def test_classifies_open_modes_that_can_read() -> None:

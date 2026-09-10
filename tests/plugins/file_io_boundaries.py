@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import inspect
 import linecache
 import os
@@ -11,7 +12,7 @@ from collections import Counter
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from types import FrameType
+from types import CodeType, FrameType
 from typing import cast
 
 import pytest
@@ -99,6 +100,7 @@ class FileIOBoundaryPlugin:
         self._configuration = configuration
         self._active = False
         self._installed = False
+        self._monitoring_tool_id: int | None = None
         self._violations: Counter[FileIOViolation] = Counter()
 
     @classmethod
@@ -113,11 +115,36 @@ class FileIOBoundaryPlugin:
         if not self._installed:
             sys.addaudithook(self._audit)
             self._installed = True
+        self._install_call_monitoring()
         self._active = True
 
     def disable(self) -> None:
         # Python audit hooks cannot be removed, so leave an inert hook behind.
         self._active = False
+        if self._monitoring_tool_id is not None:
+            tool_id = self._monitoring_tool_id
+            sys.monitoring.set_events(tool_id, 0)
+            sys.monitoring.register_callback(tool_id, sys.monitoring.events.CALL, None)
+            sys.monitoring.free_tool_id(tool_id)
+            self._monitoring_tool_id = None
+
+    def _install_call_monitoring(self) -> None:
+        if self._monitoring_tool_id is not None:
+            return
+        tool_id = next(
+            (candidate for candidate in range(6) if sys.monitoring.get_tool(candidate) is None),
+            None,
+        )
+        if tool_id is None:
+            raise RuntimeError("cannot monitor stdin reads: no sys.monitoring tool ID is free")
+        sys.monitoring.use_tool_id(tool_id, "file-io-boundary-guard")
+        sys.monitoring.register_callback(
+            tool_id,
+            sys.monitoring.events.CALL,
+            self._monitor_call,
+        )
+        sys.monitoring.set_events(tool_id, sys.monitoring.events.CALL)
+        self._monitoring_tool_id = tool_id
 
     def _audit(self, event: str, arguments: tuple[object, ...]) -> None:
         if not self._active:
@@ -125,22 +152,39 @@ class FileIOBoundaryPlugin:
         if event == "open":
             if not open_event_reads(arguments):
                 return
-        elif event not in {"os.listdir", "os.scandir"}:
+            target = _display_path(arguments[0]) if arguments else "<unknown>"
+        elif event in {"os.listdir", "os.scandir"}:
+            target = _display_path(arguments[0]) if arguments else "<unknown>"
+        elif event == "builtins.input":
+            target = "stdin"
+        else:
             return
 
         current_frame = inspect.currentframe()
-        frames = self._application_frames(
-            current_frame.f_back if current_frame is not None else None
-        )
+        self._record_read(target, current_frame.f_back if current_frame else None)
+
+    def _monitor_call(
+        self,
+        code: CodeType,
+        instruction_offset: int,
+        callable_object: object,
+        arg0: object,
+    ) -> None:
+        del code, instruction_offset
+        if not self._active or not call_reads_stdin(callable_object, arg0):
+            return
+        current_frame = inspect.currentframe()
+        self._record_read("stdin", current_frame.f_back if current_frame else None)
+
+    def _record_read(self, target: str, frame: FrameType | None) -> None:
+        frames = self._application_frames(frame)
         if not frames:
             return
         if any(
-            frame.boundary in self._configuration.allowed_reads for frame in frames
+            item.boundary in self._configuration.allowed_reads for item in frames
         ):
             return
-
-        path = _display_path(arguments[0]) if arguments else "<unknown>"
-        self._violations[FileIOViolation(path, frames)] += 1
+        self._violations[FileIOViolation(target, frames)] += 1
 
     def _application_frames(
         self, frame: FrameType | None
@@ -198,6 +242,38 @@ class FileIOBoundaryPlugin:
             verbose=config.get_verbosity() > 0,
         ):
             terminalreporter.write_line(line)
+
+
+_STDIN_READ_METHODS = {
+    "__next__",
+    "read",
+    "read1",
+    "readall",
+    "readinto",
+    "readinto1",
+    "readline",
+    "readlines",
+}
+
+
+def call_reads_stdin(callable_object: object, arg0: object) -> bool:
+    """Return whether a monitored call reads directly from standard input."""
+    if callable_object is os.read:
+        return arg0 == 0
+    if callable_object is builtins.next:
+        return _is_standard_input(arg0)
+
+    name_value = getattr(callable_object, "__name__", None)
+    if not isinstance(name_value, str) or name_value not in _STDIN_READ_METHODS:
+        return False
+
+    receiver = getattr(callable_object, "__self__", None)
+    return _is_standard_input(receiver) or _is_standard_input(arg0)
+
+
+def _is_standard_input(candidate: object) -> bool:
+    stdin = sys.stdin
+    return candidate is stdin or candidate is getattr(stdin, "buffer", None)
 
 
 def open_event_reads(arguments: Sequence[object]) -> bool:
