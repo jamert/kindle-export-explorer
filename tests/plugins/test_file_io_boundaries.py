@@ -63,7 +63,7 @@ def test_aggregates_reads_without_configured_boundary(tmp_path: Path) -> None:
         guard.disable()
 
     assert sum(guard.violations.values()) == 2
-    assert {violation.path for violation in guard.violations} == {repr(str(path))}
+    assert {violation.target for violation in guard.violations} == {repr(str(path))}
 
 
 def test_configuration_allows_omitting_write_boundaries(tmp_path: Path) -> None:
@@ -104,7 +104,7 @@ def test_monitors_arbitrary_standard_input_reads(
         guard.disable()
 
     assert sum(guard.violations.values()) == 4
-    assert {violation.path for violation in guard.violations} == {"stdin"}
+    assert {violation.target for violation in guard.violations} == {"stdin"}
 
 
 def test_classifies_open_modes_that_can_read() -> None:
@@ -121,8 +121,7 @@ def test_summarizes_symbols_unless_verbose(tmp_path: Path) -> None:
     frame = ApplicationFrame(
         filename=str(source),
         lineno=1,
-        module="package.module",
-        qualname="read_data",
+        boundary=Boundary("package.module", "read_data"),
     )
     violation = FileIOViolation("'secret.json'", (frame,))
 
