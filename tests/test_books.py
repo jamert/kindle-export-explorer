@@ -12,7 +12,11 @@ from kindle_export_explorer import (
     KindleBookRecord,
     PrintBookRecord,
 )
-from kindle_export_explorer.books import normalize_sharded_path, reconstruct_books
+from kindle_export_explorer.books import (
+    BooksSelector,
+    normalize_sharded_path,
+    reconstruct_books,
+)
 from kindle_export_explorer.cli import books as main
 
 
@@ -159,7 +163,7 @@ def test_reconstructs_and_enriches_books_without_activity_fields(
         [["ACTIVITY_ONLY", "2025-01-01", "1000"]],
     )
 
-    books = reconstruct_books(tmp_path)
+    books = reconstruct_books(tmp_path, selector=BooksSelector())
 
     assert len(books) == 1
     assert books[0].asin == "BOOK1"
@@ -192,8 +196,15 @@ def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> No
             encoding="utf-8",
         )
 
-    assert [book.asin for book in reconstruct_books(tmp_path)] == ["BALLET"]
-    assert {book.asin for book in reconstruct_books(tmp_path, show_default=True)} == {
+    assert [
+        book.asin for book in reconstruct_books(tmp_path, selector=BooksSelector())
+    ] == ["BALLET"]
+    assert {
+        book.asin
+        for book in reconstruct_books(
+            tmp_path, selector=BooksSelector(show_default=True)
+        )
+    } == {
         "BALLET",
         "DEFAULT-DICT",
         "DEFAULT-GUIDE",
@@ -232,8 +243,10 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
             encoding="utf-8",
         )
 
-    assert [book.asin for book in reconstruct_books(tmp_path)] == ["FULL"]
-    books = reconstruct_books(tmp_path, show_samples=True)
+    assert [
+        book.asin for book in reconstruct_books(tmp_path, selector=BooksSelector())
+    ] == ["FULL"]
+    books = reconstruct_books(tmp_path, selector=BooksSelector(show_samples=True))
     assert {book.asin: book.ownership_digital for book in books} == {
         "FULL": "kindle_ebook",
         "SAMPLE": "kindle_sample",
@@ -309,10 +322,10 @@ def test_sample_and_ebook_are_merged_by_asin(tmp_path: Path) -> None:
         ],
     )
 
-    default_books = reconstruct_books(tmp_path)
+    default_books = reconstruct_books(tmp_path, selector=BooksSelector())
     assert [str(book.key) for book in default_books] == ["asin:BOTH"]
 
-    all_books = reconstruct_books(tmp_path, show_samples=True)
+    all_books = reconstruct_books(tmp_path, selector=BooksSelector(show_samples=True))
     assert [str(book.key) for book in all_books] == ["asin:BOTH"]
     assert all_books[0].ownership_digital == "kindle_ebook"
     assert tuple(all_books[0].authors.names) == (
@@ -476,13 +489,16 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(
         ],
     )
 
-    kindle = reconstruct_books(tmp_path)
-    printed = reconstruct_books(tmp_path, source="print")
-    all_books = reconstruct_books(tmp_path, source="all")
+    kindle = reconstruct_books(tmp_path, selector=BooksSelector())
+    printed = reconstruct_books(tmp_path, selector=BooksSelector(source="print"))
+    all_books = reconstruct_books(tmp_path, selector=BooksSelector(source="all"))
     selected_books = reconstruct_books(
         tmp_path,
-        source="all",
-        predicate=lambda key: key.asin == "B0PRINT123",
+        selector=BooksSelector(
+            source="all",
+            included=frozenset({"b0print123"}),
+            has_include=True,
+        ),
     )
     assert [(book.asin, book.ownership_digital) for book in kindle] == [
         ("1234567890", "kindle_ebook")
@@ -743,10 +759,10 @@ def test_cloud_drive_notice_is_default_content_by_portable_metadata(
         ],
     )
 
-    default_books = reconstruct_books(tmp_path)
+    default_books = reconstruct_books(tmp_path, selector=BooksSelector())
     assert [str(book.key) for book in default_books] == ["document:USER-ID"]
 
-    shown_books = reconstruct_books(tmp_path, show_default=True)
+    shown_books = reconstruct_books(tmp_path, selector=BooksSelector(show_default=True))
     assert {str(book.key) for book in shown_books} == {
         "document:NOTICE-ID",
         "document:USER-ID",

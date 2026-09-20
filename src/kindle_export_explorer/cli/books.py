@@ -14,13 +14,14 @@ from ..books import (
     EXTRA_HEADERS,
     HEADERS,
     BookCanonical,
+    BooksSelector,
     CanonicalKey,
     ExportError,
     reconstruct_books,
 )
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
-from .utils import identifier_predicate, keys_predicate, parse_identifiers
+from .utils import keys_predicate, parse_identifiers
 
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 
@@ -95,18 +96,16 @@ def books(
         raise click.UsageError(str(exc)) from exc
     requested_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
-    predicate = identifier_predicate(requested_ids, excluded_ids)
+    selector = BooksSelector.from_cli(
+        show_default=show_default,
+        show_samples=show_samples,
+        source=source,
+        included=requested_ids,
+        excluded=excluded_ids,
+    )
 
     try:
-        books = reconstruct_books(
-            export_path,
-            # Explicit IDs override all category filters. Exclusion is part of
-            # the predicate and therefore still always wins.
-            show_default=True if requested_ids is not None else show_default,
-            show_samples=True if requested_ids is not None else show_samples,
-            source="all" if requested_ids is not None else source,
-            predicate=predicate,
-        )
+        books = reconstruct_books(export_path, selector=selector)
         acquisition_by_key = (
             {
                 item.key: item

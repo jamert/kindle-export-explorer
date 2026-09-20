@@ -12,12 +12,19 @@ from typing import Any
 import click
 
 from ..acquisitions import BookAcquisition, reconstruct_acquisitions
-from ..books import HEADERS, BookCanonical, CanonicalKey, ExportError, reconstruct_books
+from ..books import (
+    HEADERS,
+    BookCanonical,
+    BooksSelector,
+    CanonicalKey,
+    ExportError,
+    reconstruct_books,
+)
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
 from ..resolutions import ManualResolution, ResolutionError, load_resolutions
-from .utils import identifier_predicate, keys_predicate, parse_identifiers
+from .utils import keys_predicate, parse_identifiers
 
 _OVERVIEW_HEADERS = (
     *HEADERS,
@@ -71,15 +78,14 @@ def overview(
         raise click.UsageError(str(exc)) from exc
     included_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
-    predicate = identifier_predicate(included_ids, excluded_ids)
+    selector = BooksSelector(
+        show_samples=True,
+        included=frozenset(included_ids or ()),
+        excluded=frozenset(excluded_ids or ()),
+        has_include=included_ids is not None,
+    )
     try:
-        books = reconstruct_books(
-            export_path,
-            show_default=False,
-            show_samples=True,
-            source="kindle",
-            predicate=predicate,
-        )
+        books = reconstruct_books(export_path, selector=selector)
         join_predicate = keys_predicate({book.key for book in books})
         acquisitions = {
             item.key: item

@@ -47,6 +47,110 @@ type CanonicalKeyPredicate = Callable[[CanonicalKey], bool]
 
 
 @dataclass(frozen=True)
+class BooksSelector:
+    """Own all user-requested filtering of reconstructed books."""
+
+    show_default: bool = False
+    show_samples: bool = False
+    source: str = "kindle"
+    included: frozenset[str] = frozenset()
+    excluded: frozenset[str] = frozenset()
+    has_include: bool = False
+
+    def __post_init__(self) -> None:
+        if self.source not in {"kindle", "print", "all"}:
+            raise ValueError(f"invalid source: {self.source}")
+
+    @classmethod
+    def from_cli(
+        cls,
+        *,
+        show_default: bool,
+        show_samples: bool,
+        source: str,
+        included: set[str] | None,
+        excluded: set[str] | None,
+    ) -> BooksSelector:
+        """Build a selector, including the CLI's explicit-include override."""
+        explicit = included is not None
+        return cls(
+            show_default=show_default or explicit,
+            show_samples=show_samples or explicit,
+            source="all" if explicit else source,
+            included=frozenset(included or ()),
+            excluded=frozenset(excluded or ()),
+            has_include=explicit,
+        )
+
+    def key(self, key: CanonicalKey) -> bool:
+        identifiers = {
+            value.casefold() for value in (str(key), key.asin, key.document_id) if value
+        }
+        return (
+            not self.has_include or bool(identifiers & self.included)
+        ) and not identifiers & self.excluded
+
+    def source_dict(self, values: Mapping[str, object]) -> bool:
+        """Select a parsed JSON object or CSV row by its book identifier."""
+        asin = _clean_identifier(values.get("ASIN"))
+        if not asin:
+            asin = clean_item_asin(values.get("item-ASIN"))
+        document_id = _clean_identifier(values.get("DocumentId"))
+        if asin:
+            return self.source_key(CanonicalKey(asin=asin))
+        if document_id:
+            return self.source_key(CanonicalKey(document_id=document_id))
+        return False
+
+    def source_key(self, key: CanonicalKey) -> bool:
+        """Select a source record whose canonical key is already known."""
+        return self.key(key)
+
+    def collects_kindle(self) -> bool:
+        return self.source in {"kindle", "all"}
+
+    def collects_print(self) -> bool:
+        return self.source in {"print", "all"}
+
+    def collects_sample_only(self) -> bool:
+        return self.show_samples
+
+    def joined_kindle(
+        self,
+        records: tuple[KindleBookRecord, ...],
+    ) -> tuple[KindleBookRecord, ...]:
+        """Select a joined full-book/sample group before canonicalization."""
+        full_record = next((record for record in records if not record.sample), None)
+        if full_record is not None:
+            return records if self.show_default or not full_record.default else ()
+        if not self.show_samples:
+            return ()
+        return tuple(
+            record for record in records if self.show_default or not record.default
+        )
+
+    def joined_document(self, record: DocumentRecord) -> bool:
+        """Select a joined personal-document record before canonicalization."""
+        return self.show_default or not record.default
+
+    def canonical(self, book: BookCanonical) -> bool:
+        if not self.key(book.key):
+            return False
+        if self.source == "kindle" and book.ownership_print:
+            return False
+        if self.source == "print" and not book.ownership_print:
+            return False
+        if not self.show_default and book.ownership_digital is DigitalOwnership.DEFAULT:
+            return False
+        if (  # noqa: SIM103
+            not self.show_samples
+            and book.ownership_digital is DigitalOwnership.KINDLE_SAMPLE
+        ):
+            return False
+        return True
+
+
+@dataclass(frozen=True)
 class Authors:
     """Ordered author names and unpaired Amazon author-page ASINs."""
 
@@ -182,36 +286,17 @@ EXTRA_HEADERS = [
 def reconstruct_books(
     root: Path,
     *,
-    show_default: bool = False,
-    show_samples: bool = False,
-    source: str = "kindle",
-    predicate: CanonicalKeyPredicate | None = None,
+    selector: BooksSelector,
 ) -> list[BookCanonical]:
     """Join source records and return canonical books found under *root*.
 
-    ``source`` selects Kindle content, print books, or ``all``. Samples are omitted
-    unless ``show_samples`` is true. Kindle-supplied dictionaries and user guides
-    are omitted unless ``show_default`` is true. When supplied, ``predicate`` is
-    applied to canonical keys while source rows are read. Activity fields (reading
-    dates, progress, sessions, annotations, and account state) are deliberately not
-    copied.
+    The selector is applied both to parsed source dictionaries and to canonical
+    books. Activity fields (reading dates, progress, sessions, annotations, and
+    account state) are deliberately not copied.
     """
-    if source not in {"kindle", "print", "all"}:
-        raise ValueError(f"invalid source: {source}")
     root = root.expanduser()
-    catalog = _assemble_source_records(
-        root,
-        show_default=show_default,
-        show_samples=show_samples,
-        source=source,
-        predicate=predicate or _accept_key,
-    )
-    return _canonicalize_records(
-        catalog,
-        show_default=show_default,
-        show_samples=show_samples,
-        source=source,
-    )
+    catalog = _assemble_source_records(root, selector=selector)
+    return [book for book in _canonicalize_records(catalog) if selector.canonical(book)]
 
 
 # Canonical conversion
@@ -434,16 +519,8 @@ AsinBookRecord = KindleBookRecord | PrintBookRecord
 class SourceRecordCatalog:
     """Keep selected ownership records separate and deduplicate by source key."""
 
-    def __init__(
-        self,
-        predicate: CanonicalKeyPredicate,
-        *,
-        collect_kindle: bool,
-        collect_print: bool,
-    ) -> None:
-        self._predicate = predicate
-        self._collect_kindle = collect_kindle
-        self._collect_print = collect_print
+    def __init__(self, selector: BooksSelector) -> None:
+        self._selector = selector
         self._known_kindle: set[tuple[str, bool]] = set()
         self._kindle: dict[tuple[str, bool], KindleBookRecord] = {}
         self._print: dict[str, PrintBookRecord] = {}
@@ -458,12 +535,14 @@ class SourceRecordCatalog:
         create: bool = True,
     ) -> KindleBookRecord | None:
         asin_value = _clean_identifier(asin)
-        if not asin_value or not self._predicate(CanonicalKey(asin=asin_value)):
+        if not asin_value or not self._selector.source_key(
+            CanonicalKey(asin=asin_value)
+        ):
             return None
         key = (asin_value, sample)
         if create:
             self._known_kindle.add(key)
-        if not self._collect_kindle:
+        if not self._selector.collects_kindle():
             return None
         record = self._kindle.get(key)
         if record is None and create:
@@ -485,8 +564,8 @@ class SourceRecordCatalog:
         asin_value = _clean_identifier(asin)
         if (
             not asin_value
-            or not self._collect_print
-            or not self._predicate(CanonicalKey(asin=asin_value))
+            or not self._selector.collects_print()
+            or not self._selector.source_key(CanonicalKey(asin=asin_value))
         ):
             return None
         record = self._print.get(asin_value)
@@ -502,8 +581,8 @@ class SourceRecordCatalog:
         document_value = _clean_identifier(document_id)
         if (
             not document_value
-            or not self._collect_kindle
-            or not self._predicate(CanonicalKey(document_id=document_value))
+            or not self._selector.collects_kindle()
+            or not self._selector.source_key(CanonicalKey(document_id=document_value))
         ):
             return None
         record = self._documents.get(document_value)
@@ -515,36 +594,22 @@ class SourceRecordCatalog:
     def has_kindle(self, asin: object, *, sample: bool) -> bool:
         return (_clean_identifier(asin), sample) in self._known_kindle
 
-    def retain_visible_kindle(
-        self,
-        *,
-        show_default: bool,
-        show_samples: bool,
-    ) -> None:
+    def retain_visible_kindle(self) -> None:
         """Discard groups which cannot produce output before reading join tables."""
         retained: dict[tuple[str, bool], KindleBookRecord] = {}
         for group in self.kindle_groups():
-            full_record = next((record for record in group if not record.sample), None)
-            if full_record is not None:
-                if show_default or not full_record.default:
-                    retained.update(
-                        ((record.asin, record.sample), record) for record in group
-                    )
-            elif show_samples:
-                retained.update(
-                    ((record.asin, record.sample), record)
-                    for record in group
-                    if show_default or not record.default
-                )
+            retained.update(
+                ((record.asin, record.sample), record)
+                for record in self._selector.joined_kindle(group)
+            )
         self._kindle = retained
 
-    def retain_visible_documents(self, *, show_default: bool) -> None:
-        if not show_default:
-            self._documents = {
-                key: record
-                for key, record in self._documents.items()
-                if not record.default
-            }
+    def retain_visible_documents(self) -> None:
+        self._documents = {
+            key: record
+            for key, record in self._documents.items()
+            if self._selector.joined_document(record)
+        }
 
     def has_records_for_asin(self, asin: object) -> bool:
         return bool(self.records_for_asin(asin))
@@ -724,10 +789,6 @@ def normalize_sharded_path(root: ExportPath, path: ExportPath) -> str:
     return _relative_path(root, path)
 
 
-def _accept_key(key: CanonicalKey) -> bool:
-    return True
-
-
 def _csv_rows(
     root: ExportPath,
     paths: Iterable[ExportPath],
@@ -797,54 +858,27 @@ class ExportFiles:
         ]
 
 
-def _canonicalize_records(
-    catalog: SourceRecordCatalog,
-    *,
-    show_default: bool,
-    show_samples: bool,
-    source: str,
-) -> list[BookCanonical]:
+def _canonicalize_records(catalog: SourceRecordCatalog) -> list[BookCanonical]:
     result: list[BookCanonical] = []
-    if source in {"kindle", "all"}:
-        for group in catalog.kindle_groups():
-            full_record = next(
-                (record for record in group if not record.sample),
-                None,
-            )
-            if full_record is not None:
-                if show_default or not full_record.default:
-                    result.extend(CanonicalizationService.convert_kindle(*group))
-            elif show_samples:
-                visible = tuple(
-                    record for record in group if show_default or not record.default
-                )
-                result.extend(CanonicalizationService.convert_kindle(*visible))
-        result.extend(
-            CanonicalizationService.convert_document(record)
-            for record in catalog.document_records()
-            if show_default or not record.default
-        )
-    if source in {"print", "all"}:
-        result.extend(
-            CanonicalizationService.convert_print(record)
-            for record in catalog.print_records()
-        )
+    for group in catalog.kindle_groups():
+        result.extend(CanonicalizationService.convert_kindle(*group))
+    result.extend(
+        CanonicalizationService.convert_document(record)
+        for record in catalog.document_records()
+    )
+    result.extend(
+        CanonicalizationService.convert_print(record)
+        for record in catalog.print_records()
+    )
     return sorted(result, key=lambda book: (book.title.casefold(), str(book.key)))
 
 
 def _assemble_source_records(
     root: Path,
     *,
-    show_default: bool,
-    show_samples: bool,
-    source: str,
-    predicate: CanonicalKeyPredicate,
+    selector: BooksSelector,
 ) -> SourceRecordCatalog:
-    catalog = SourceRecordCatalog(
-        predicate,
-        collect_kindle=source in {"kindle", "all"},
-        collect_print=source in {"print", "all"},
-    )
+    catalog = SourceRecordCatalog(selector)
     files = ExportFiles(root)
     recognized = False
 
@@ -865,7 +899,7 @@ def _assemble_source_records(
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
         asin = _clean_identifier(resource.get("ASIN"))
-        if not asin or not predicate(CanonicalKey(asin=asin)):
+        if not selector.source_dict(resource):
             continue
         rights_value = data.get("rights", [])
         rights_items = (
@@ -898,10 +932,7 @@ def _assemble_source_records(
     # Category filtering can now remove most source records before any of the
     # metadata-only relations are read. Known Kindle keys remain available so a
     # hidden digital item is not later mistaken for a print purchase.
-    catalog.retain_visible_kindle(
-        show_default=show_default,
-        show_samples=show_samples,
-    )
+    catalog.retain_visible_kindle()
 
     # Unified Library Index identifies actual library items. Exclude rows which
     # only describe wish-list/not-interested/customer-metadata activity.
@@ -911,10 +942,7 @@ def _assemble_source_records(
     for _, row in _csv_rows(
         files.root,
         relationship_paths,
-        lambda row: (
-            bool(asin := _clean_identifier(row.get("ASIN")))
-            and predicate(CanonicalKey(asin=asin))
-        ),
+        selector.source_dict,
     ):
         if clean(row.get("Resource Type")).casefold() != "item":
             continue
@@ -929,7 +957,7 @@ def _assemble_source_records(
             full_record = catalog.kindle(asin, create=False)
             if catalog.has_kindle(asin, sample=False) and full_record is None:
                 continue
-            if full_record is None and not show_samples:
+            if full_record is None and not selector.collects_sample_only():
                 continue
             asin_record = catalog.kindle(
                 asin,
@@ -991,17 +1019,14 @@ def _assemble_source_records(
     for _, row in _csv_rows(
         files.root,
         document_paths,
-        lambda row: (
-            bool(document_id := _clean_identifier(row.get("DocumentId")))
-            and predicate(CanonicalKey(document_id=document_id))
-        ),
+        selector.source_dict,
     ):
         document = catalog.document(row.get("DocumentId"))
         if document:
             document.default = is_default_personal_document(row)
             document.provider = clean(row.get("DocumentProvider"))
             document.title = clean(row.get("Title"))
-    catalog.retain_visible_documents(show_default=show_default)
+    catalog.retain_visible_documents()
 
     # The Saga table provides explicit item-to-series metadata.
     saga_paths = files.named("CollectionRightsDatastore")
