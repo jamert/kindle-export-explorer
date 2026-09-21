@@ -376,9 +376,10 @@ def _process_digital_ownership_records(
             resource = cast(dict[str, object], resource_value)
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
-        asin = _clean_identifier(resource.get("ASIN"))
+
         if not selector.source_dict(resource):
             continue
+
         rights_value = data.get("rights", [])
         rights_items = (
             cast(list[object], rights_value) if isinstance(rights_value, list) else []
@@ -388,18 +389,21 @@ def _process_digital_ownership_records(
             for right in rights_items
             if isinstance(right, dict)
         ]
+
         origins: set[str] = set()
         for right in rights:
             origin_value = right.get("origin")
             if isinstance(origin_value, dict):
                 origin = cast(dict[str, object], origin_value)
                 origins.add(clean(origin.get("originType")).casefold())
+
         is_sample_resource = (
             clean(resource.get("resourceType")).casefold() == "kindleebooksample"
             or "sample" in origins
         )
+
         book = catalog.kindle(
-            asin,
+            asin=_clean_identifier(resource.get("ASIN")),
             title=resource.get("Product Name"),
             sample=is_sample_resource,
         )
