@@ -17,6 +17,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "isort>=9.0.1",
     "pre-commit>=4.6.2",
     "pyright>=1.1.411",
     "pytest>=9.1.1",
@@ -26,9 +27,16 @@ dev = [
 [tool.ruff]
 line-length = 88
 
+[tool.isort]
+# Ruff's formatter follows Black's style; keep import wrapping compatible.
+profile = "black"
+line_length = 88
+skip_gitignore = true
+
 [tool.ruff.lint]
 extend-select = ["D100"]
 ignore = [
+    "I001",   # import sorting is enforced by isort
     "PIE807", # allows `lambda: []` for pyright
 ]
 

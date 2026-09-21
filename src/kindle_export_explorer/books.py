@@ -11,8 +11,9 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
 from typing import Any, cast
-from zipfile import BadZipFile, ZipFile, is_zipfile
+from zipfile import BadZipFile
 from zipfile import Path as ZipPath
+from zipfile import ZipFile, is_zipfile
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
 _DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}

@@ -13,6 +13,12 @@ repos:
         language: system
         pass_filenames: false
         always_run: true
+      - id: isort
+        name: isort
+        entry: uv run isort --check-only --diff .
+        language: system
+        pass_filenames: false
+        always_run: true
       - id: ruff-check
         name: ruff check
         entry: uv run ruff check

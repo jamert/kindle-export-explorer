@@ -223,8 +223,8 @@ uv sync --dev
 uv run pre-commit install
 ```
 
-The hook runs the test suite with `KINDLE_EXPORT_PATH` unset and then runs Pyright.
-Run the same checks across the repository manually with:
+The hooks run the test suite with `KINDLE_EXPORT_PATH` unset, Pyright, isort,
+and Ruff. Run the same checks across the repository manually with:
 
 ```console
 uv run pre-commit run --all-files
