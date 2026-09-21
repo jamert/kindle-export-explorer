@@ -23,7 +23,7 @@ from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from .utils import keys_predicate, parse_identifiers
 
-_ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
+__all__ = ["books"]
 
 
 # Command overview
@@ -141,6 +141,9 @@ def _write_json_lines(
         click.echo(json.dumps(record, ensure_ascii=False))
 
 
+_ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
+
+
 def _write_tsv(
     books: list[BookCanonical],
     extra: bool,
@@ -168,6 +171,3 @@ def _acquisition_values(
         else None,
         "acquired_book": format_datetime(acquired_book) if acquired_book else None,
     }
-
-
-__all__ = ["books"]
