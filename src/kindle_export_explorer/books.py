@@ -323,146 +323,24 @@ def _assemble_source_records(
 
     # Unified Library Index identifies actual library items. Exclude rows which
     # only describe wish-list/not-interested/customer-metadata activity.
-    relationship_paths = files.named("CustomerRelationshipIndex")
-    for _, row in _csv_rows(
-        files.root,
-        relationship_paths,
-        selector.source_dict,
-    ):
-        if clean(row.get("Resource Type")).casefold() != "item":
-            continue
-        ownership_type = clean(row.get("Ownership Type")).casefold()
-        if ownership_type not in _OWNER_TYPES:
-            continue
-        asin = clean(row.get("ASIN"))
-        if ownership_type == "sample owner":
-            sample_record = catalog.kindle(asin, sample=True, create=False)
-            if catalog.has_kindle(asin, sample=True) and sample_record is None:
-                continue
-            full_record = catalog.kindle(asin, create=False)
-            if catalog.has_kindle(asin, sample=False) and full_record is None:
-                continue
-            if full_record is None and not selector.collects_sample_only():
-                continue
-            asin_record = catalog.kindle(
-                asin,
-                title=row.get("Product Name"),
-                sample=True,
-            )
-        else:
-            # ULI repeats Kindle purchases and also contains physical purchases.
-            # Existing digital ownership takes precedence; otherwise this is the
-            # best available evidence for a print record.
-            if catalog.has_kindle(asin, sample=False):
-                asin_record = catalog.kindle(asin, create=False)
-            else:
-                asin_record = catalog.printed(
-                    asin,
-                    title=row.get("Product Name"),
-                )
-        if asin_record:
-            metadata = asin_record.metadata
-            metadata.set_title(row.get("Product Name"), 50)
-            sortable_title = clean(row.get("Sortable Title"))
-            if sortable_title:
-                metadata.sortable_title = sortable_title
-            sortable_author = clean(row.get("Sortable Author Name"))
-            if sortable_author:
-                metadata.sortable_author = sortable_author
-            marketplace = clean(row.get("Marketplace"))
-            if marketplace:
-                metadata.marketplaces.add(marketplace)
-            series_title, series_asin = split_series_title_and_asin(
-                row.get("Series Title")
-            )
-            metadata.set_series(
-                series_title,
-                row.get("Position In Collection"),
-                10,
-                series_asin,
-            )
+    _process_customer_relationship_index_records(files, selector, catalog)
 
     # BookRelation contains intrinsic item-to-series catalog relations. Its
     # acquisition timestamp is deliberately ignored.
-    book_relation_paths = files.named("BookRelation.csv")
-    for _, row in _csv_rows(
-        files.root,
-        book_relation_paths,
-        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
-    ):
-        if not clean(row.get("Product Name")):
-            continue
-        for record in catalog.records_for_asin(row.get("ASIN")):
-            record.metadata.set_title(row.get("Product Name"), 35)
+    _process_book_relation_records(files, catalog)
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
-    document_paths = files.named("DocumentMetadata")
-    for _, row in _csv_rows(
-        files.root,
-        document_paths,
-        selector.source_dict,
-    ):
-        document = catalog.document(row.get("DocumentId"))
-        if document:
-            document.default = is_default_personal_document(row)
-            document.provider = clean(row.get("DocumentProvider"))
-            document.title = clean(row.get("Title"))
+    _process_document_metadata_records(files, selector, catalog)
     catalog.retain_visible_documents()
 
     # The Saga table provides explicit item-to-series metadata.
-    saga_paths = files.named("CollectionRightsDatastore")
-    for _, row in _csv_rows(
-        files.root,
-        saga_paths,
-        lambda row: catalog.has_records_for_asin(clean_item_asin(row.get("item-ASIN"))),
-    ):
-        if clean(row.get("record-type")).casefold() != "item":
-            continue
-        item_asin = clean_item_asin(row.get("item-ASIN"))
-        records = catalog.records_for_asin(item_asin)
-        # Some rows connect nested series or describe unowned catalog items.
-        if not records:
-            continue
-        for record in records:
-            record.metadata.set_title(row.get("item-product-name"), 45)
-            record.metadata.set_series(
-                row.get("series-product-name"),
-                row.get("item-position-in-series"),
-                50,
-                row.get("series-ASIN"),
-            )
+    _process_collection_rights_datastore_records(files, catalog)
 
     # Enrich established ASIN records from metadata-only ULI relations. These
     # files do not seed records, preventing recommendations and wish-list items.
-    for _, row in _csv_rows(
-        files.root,
-        files.named("CustomerAuthorNameRelationship"),
-        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
-    ):
-        author = clean(row.get("Author Name"))
-        if author:
-            for book in catalog.records_for_asin(row.get("ASIN")):
-                if author not in book.metadata.authors:
-                    book.metadata.authors.append(author)
-    for _, row in _csv_rows(
-        files.root,
-        files.named("CustomerAuthorIdRelationship"),
-        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
-    ):
-        author_asin = clean(row.get("Author ID"))
-        if author_asin:
-            for book in catalog.records_for_asin(row.get("ASIN")):
-                if author_asin not in book.metadata.author_asins:
-                    book.metadata.author_asins.append(author_asin)
-    for _, row in _csv_rows(
-        files.root,
-        files.named("CustomerGenres"),
-        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
-    ):
-        genre = clean(row.get("Genre"))
-        if genre:
-            for book in catalog.records_for_asin(row.get("ASIN")):
-                book.metadata.genres.add(genre)
+    _process_customer_author_name_relationship_records(files, catalog)
+    _process_customer_author_id_relationship_records(files, catalog)
+    _process_customer_genres_records(files, catalog)
 
     return catalog
 
@@ -528,6 +406,175 @@ def _process_digital_ownership_records(
         if book:
             book.metadata.set_title(resource.get("Product Name"), 30)
             book.default = book.default or bool(origins & _DEFAULT_ORIGIN_TYPES)
+
+
+def _process_customer_relationship_index_records(
+    files: ExportFiles,
+    selector: BooksSelector,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("CustomerRelationshipIndex"),
+        selector.source_dict,
+    ):
+        if clean(row.get("Resource Type")).casefold() != "item":
+            continue
+        ownership_type = clean(row.get("Ownership Type")).casefold()
+        if ownership_type not in _OWNER_TYPES:
+            continue
+        asin = clean(row.get("ASIN"))
+        if ownership_type == "sample owner":
+            sample_record = catalog.kindle(asin, sample=True, create=False)
+            if catalog.has_kindle(asin, sample=True) and sample_record is None:
+                continue
+            full_record = catalog.kindle(asin, create=False)
+            if catalog.has_kindle(asin, sample=False) and full_record is None:
+                continue
+            if full_record is None and not selector.collects_sample_only():
+                continue
+            asin_record = catalog.kindle(
+                asin,
+                title=row.get("Product Name"),
+                sample=True,
+            )
+        else:
+            # ULI repeats Kindle purchases and also contains physical purchases.
+            # Existing digital ownership takes precedence; otherwise this is the
+            # best available evidence for a print record.
+            if catalog.has_kindle(asin, sample=False):
+                asin_record = catalog.kindle(asin, create=False)
+            else:
+                asin_record = catalog.printed(
+                    asin,
+                    title=row.get("Product Name"),
+                )
+        if asin_record:
+            metadata = asin_record.metadata
+            metadata.set_title(row.get("Product Name"), 50)
+            sortable_title = clean(row.get("Sortable Title"))
+            if sortable_title:
+                metadata.sortable_title = sortable_title
+            sortable_author = clean(row.get("Sortable Author Name"))
+            if sortable_author:
+                metadata.sortable_author = sortable_author
+            marketplace = clean(row.get("Marketplace"))
+            if marketplace:
+                metadata.marketplaces.add(marketplace)
+            series_title, series_asin = split_series_title_and_asin(
+                row.get("Series Title")
+            )
+            metadata.set_series(
+                series_title,
+                row.get("Position In Collection"),
+                10,
+                series_asin,
+            )
+
+
+def _process_book_relation_records(
+    files: ExportFiles,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("BookRelation.csv"),
+        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
+    ):
+        if not clean(row.get("Product Name")):
+            continue
+        for record in catalog.records_for_asin(row.get("ASIN")):
+            record.metadata.set_title(row.get("Product Name"), 35)
+
+
+def _process_document_metadata_records(
+    files: ExportFiles,
+    selector: BooksSelector,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("DocumentMetadata"),
+        selector.source_dict,
+    ):
+        document = catalog.document(row.get("DocumentId"))
+        if document:
+            document.default = is_default_personal_document(row)
+            document.provider = clean(row.get("DocumentProvider"))
+            document.title = clean(row.get("Title"))
+
+
+def _process_collection_rights_datastore_records(
+    files: ExportFiles,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("CollectionRightsDatastore"),
+        lambda row: catalog.has_records_for_asin(clean_item_asin(row.get("item-ASIN"))),
+    ):
+        if clean(row.get("record-type")).casefold() != "item":
+            continue
+        item_asin = clean_item_asin(row.get("item-ASIN"))
+        records = catalog.records_for_asin(item_asin)
+        # Some rows connect nested series or describe unowned catalog items.
+        if not records:
+            continue
+        for record in records:
+            record.metadata.set_title(row.get("item-product-name"), 45)
+            record.metadata.set_series(
+                row.get("series-product-name"),
+                row.get("item-position-in-series"),
+                50,
+                row.get("series-ASIN"),
+            )
+
+
+def _process_customer_author_name_relationship_records(
+    files: ExportFiles,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("CustomerAuthorNameRelationship"),
+        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
+    ):
+        author = clean(row.get("Author Name"))
+        if author:
+            for book in catalog.records_for_asin(row.get("ASIN")):
+                if author not in book.metadata.authors:
+                    book.metadata.authors.append(author)
+
+
+def _process_customer_author_id_relationship_records(
+    files: ExportFiles,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("CustomerAuthorIdRelationship"),
+        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
+    ):
+        author_asin = clean(row.get("Author ID"))
+        if author_asin:
+            for book in catalog.records_for_asin(row.get("ASIN")):
+                if author_asin not in book.metadata.author_asins:
+                    book.metadata.author_asins.append(author_asin)
+
+
+def _process_customer_genres_records(
+    files: ExportFiles,
+    catalog: SourceRecordCatalog,
+) -> None:
+    for _, row in _csv_rows(
+        files.root,
+        files.named("CustomerGenres"),
+        lambda row: catalog.has_records_for_asin(row.get("ASIN")),
+    ):
+        genre = clean(row.get("Genre"))
+        if genre:
+            for book in catalog.records_for_asin(row.get("ASIN")):
+                book.metadata.genres.add(genre)
 
 
 # Canonical conversion
