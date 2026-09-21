@@ -111,14 +111,14 @@ A Kindle sample and full ebook with the same ASIN are merged. The merged record 
 `ownership_digital=kindle_ebook`; a sample-only record remains `kindle_sample`.
 
 Samples, Kindle defaults, and Amazon's Cloud Drive notice are hidden by default.
-Print-only records are available with `--source print`; use `--source all` for every
-ownership type:
+Print-only records are available with `--format print`; use `--format all` for every
+ownership format:
 
 ```console
 uv run kindle-export-explorer books --show-samples /path/to/Kindle
 uv run kindle-export-explorer books --show-default /path/to/Kindle
-uv run kindle-export-explorer books --source print /path/to/Kindle
-uv run kindle-export-explorer books --source all --show-samples --show-default /path/to/Kindle
+uv run kindle-export-explorer books --format print /path/to/Kindle
+uv run kindle-export-explorer books --format all --show-samples --show-default /path/to/Kindle
 ```
 
 Select comma-separated keys, ASINs, or document IDs with `--include`. Explicit

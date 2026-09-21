@@ -385,8 +385,8 @@ def test_extra_adds_series_genres_and_link(tmp_path: Path) -> None:
     )
 
     runner = CliRunner()
-    plain = runner.invoke(main, ["--source", "all", str(tmp_path)])
-    extra = runner.invoke(main, ["--extra", "--source", "all", str(tmp_path)])
+    plain = runner.invoke(main, ["--format", "all", str(tmp_path)])
+    extra = runner.invoke(main, ["--extra", "--format", "all", str(tmp_path)])
     assert plain.exit_code == 0
     assert extra.exit_code == 0
     assert plain.output.splitlines()[0].split("\t") == [
@@ -449,7 +449,7 @@ def test_canonical_uses_sortable_author_only_as_fallback(
         ],
     )
 
-    result = CliRunner().invoke(main, ["--extra", "--source", "all", str(tmp_path)])
+    result = CliRunner().invoke(main, ["--extra", "--format", "all", str(tmp_path)])
     assert result.exit_code == 0
     row = next(csv.DictReader(result.output.splitlines(), dialect="excel-tab"))
     assert row["title"] == "Example, The"
@@ -461,7 +461,7 @@ def test_canonical_uses_sortable_author_only_as_fallback(
     assert "using www.amazon.com" in result.stderr
 
 
-def test_source_filters_kindle_and_print_from_provenance_not_asin(
+def test_format_filters_kindle_and_print_from_provenance_not_asin(
     tmp_path: Path,
 ) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
@@ -490,12 +490,12 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(
     )
 
     kindle = reconstruct_books(tmp_path, selector=BooksSelector())
-    printed = reconstruct_books(tmp_path, selector=BooksSelector(source="print"))
-    all_books = reconstruct_books(tmp_path, selector=BooksSelector(source="all"))
+    printed = reconstruct_books(tmp_path, selector=BooksSelector(format="print"))
+    all_books = reconstruct_books(tmp_path, selector=BooksSelector(format="all"))
     selected_books = reconstruct_books(
         tmp_path,
         selector=BooksSelector(
-            source="all",
+            format="all",
             included=frozenset({"b0print123"}),
             has_include=True,
         ),
@@ -509,7 +509,7 @@ def test_source_filters_kindle_and_print_from_provenance_not_asin(
     assert len(all_books) == 2
     assert [book.asin for book in selected_books] == ["B0PRINT123"]
 
-    result = CliRunner().invoke(main, ["--source", "print", str(tmp_path)])
+    result = CliRunner().invoke(main, ["--format", "print", str(tmp_path)])
     assert result.exit_code == 0
     assert "Everything Fat Loss" in result.output
     assert "Numeric Kindle Book" not in result.output

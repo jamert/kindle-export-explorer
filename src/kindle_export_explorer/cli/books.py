@@ -37,11 +37,11 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 )
 @click.option("--show-samples", is_flag=True, help="Include book samples.")
 @click.option(
-    "--source",
+    "--format",
     type=click.Choice(["kindle", "print", "all"], case_sensitive=False),
     default="kindle",
     show_default=True,
-    help="Select books by ownership source.",
+    help="Select books by format.",
 )
 @click.option(
     "--extra",
@@ -79,7 +79,7 @@ def books(
     export_path: Path | None,
     show_default: bool,
     show_samples: bool,
-    source: str,
+    format: str,
     extra: bool,
     acquisition: bool,
     json_lines: bool,
@@ -99,7 +99,7 @@ def books(
     selector = BooksSelector.from_cli(
         show_default=show_default,
         show_samples=show_samples,
-        source=source,
+        format=format,
         included=requested_ids,
         excluded=excluded_ids,
     )

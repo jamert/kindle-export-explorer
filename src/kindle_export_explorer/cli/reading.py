@@ -61,7 +61,7 @@ def reading(canonical_key: str, export_path: Path | None) -> None:
                     selector=BooksSelector(
                         show_default=True,
                         show_samples=True,
-                        source="all",
+                        format="all",
                         included=frozenset({str(key).casefold()}),
                         has_include=True,
                     ),

@@ -70,7 +70,7 @@ def resolve_reading(
     selector = BooksSelector(
         show_default=included_ids is not None,
         show_samples=included_ids is not None,
-        source="kindle",
+        format="kindle",
         included=frozenset(included_ids or ()),
         excluded=frozenset(excluded_ids or ()),
         has_include=included_ids is not None,

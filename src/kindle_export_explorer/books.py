@@ -52,14 +52,14 @@ class BooksSelector:
 
     show_default: bool = False
     show_samples: bool = False
-    source: str = "kindle"
+    format: str = "kindle"
     included: frozenset[str] = frozenset()
     excluded: frozenset[str] = frozenset()
     has_include: bool = False
 
     def __post_init__(self) -> None:
-        if self.source not in {"kindle", "print", "all"}:
-            raise ValueError(f"invalid source: {self.source}")
+        if self.format not in {"kindle", "print", "all"}:
+            raise ValueError(f"invalid format: {self.format}")
 
     @classmethod
     def from_cli(
@@ -67,7 +67,7 @@ class BooksSelector:
         *,
         show_default: bool,
         show_samples: bool,
-        source: str,
+        format: str,
         included: set[str] | None,
         excluded: set[str] | None,
     ) -> BooksSelector:
@@ -76,7 +76,7 @@ class BooksSelector:
         return cls(
             show_default=show_default or explicit,
             show_samples=show_samples or explicit,
-            source="all" if explicit else source,
+            format="all" if explicit else format,
             included=frozenset(included or ()),
             excluded=frozenset(excluded or ()),
             has_include=explicit,
@@ -107,10 +107,10 @@ class BooksSelector:
         return self.key(key)
 
     def collects_kindle(self) -> bool:
-        return self.source in {"kindle", "all"}
+        return self.format in {"kindle", "all"}
 
     def collects_print(self) -> bool:
-        return self.source in {"print", "all"}
+        return self.format in {"print", "all"}
 
     def collects_sample_only(self) -> bool:
         return self.show_samples
@@ -136,9 +136,9 @@ class BooksSelector:
     def canonical(self, book: BookCanonical) -> bool:
         if not self.key(book.key):
             return False
-        if self.source == "kindle" and book.ownership_print:
+        if self.format == "kindle" and book.ownership_print:
             return False
-        if self.source == "print" and not book.ownership_print:
+        if self.format == "print" and not book.ownership_print:
             return False
         if not self.show_default and book.ownership_digital is DigitalOwnership.DEFAULT:
             return False
