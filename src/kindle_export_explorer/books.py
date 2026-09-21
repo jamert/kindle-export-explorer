@@ -310,12 +310,10 @@ def _assemble_source_records(
 ) -> SourceRecordCatalog:
     catalog = SourceRecordCatalog(selector)
     files = ExportFiles(root)
-    recognized = False
+    _raise_if_book_files_missing(files)
 
     # Digital ownership is the broadest source for Kindle books and samples.
     ownership_files = files.named("Digital.Content.Ownership", ".json")
-    if ownership_files:
-        recognized = True
     for path in ownership_files:
         try:
             value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
@@ -367,8 +365,6 @@ def _assemble_source_records(
     # Unified Library Index identifies actual library items. Exclude rows which
     # only describe wish-list/not-interested/customer-metadata activity.
     relationship_paths = files.named("CustomerRelationshipIndex")
-    if relationship_paths:
-        recognized = True
     for _, row in _csv_rows(
         files.root,
         relationship_paths,
@@ -430,8 +426,6 @@ def _assemble_source_records(
     # BookRelation contains intrinsic item-to-series catalog relations. Its
     # acquisition timestamp is deliberately ignored.
     book_relation_paths = files.named("BookRelation.csv")
-    if book_relation_paths:
-        recognized = True
     for _, row in _csv_rows(
         files.root,
         book_relation_paths,
@@ -444,8 +438,6 @@ def _assemble_source_records(
 
     # Personal documents have no ASIN, so preserve their Amazon document ID.
     document_paths = files.named("DocumentMetadata")
-    if document_paths:
-        recognized = True
     for _, row in _csv_rows(
         files.root,
         document_paths,
@@ -460,8 +452,6 @@ def _assemble_source_records(
 
     # The Saga table provides explicit item-to-series metadata.
     saga_paths = files.named("CollectionRightsDatastore")
-    if saga_paths:
-        recognized = True
     for _, row in _csv_rows(
         files.root,
         saga_paths,
@@ -515,9 +505,20 @@ def _assemble_source_records(
             for book in catalog.records_for_asin(row.get("ASIN")):
                 book.metadata.genres.add(genre)
 
-    if not recognized:
-        raise ExportError(f"no recognized Kindle export files found in {root}")
     return catalog
+
+
+def _raise_if_book_files_missing(files: ExportFiles) -> None:
+    """Raise when the export contains no files used to reconstruct books."""
+    required_files = (
+        files.named("Digital.Content.Ownership", ".json"),
+        files.named("CustomerRelationshipIndex"),
+        files.named("BookRelation.csv"),
+        files.named("DocumentMetadata"),
+        files.named("CollectionRightsDatastore"),
+    )
+    if not any(required_files):
+        raise ExportError(f"no recognized Kindle export files found in {files.source}")
 
 
 # Canonical conversion
