@@ -19,7 +19,6 @@ from ..reading import BookReading, reconstruct_reading
 from ..resolutions import ManualResolution, ResolutionError, load_resolutions
 from .utils import identifier_predicate, keys_predicate, parse_identifiers
 
-
 _OVERVIEW_HEADERS = (
     *HEADERS,
     "read_status",
@@ -109,6 +108,7 @@ def overview(
 
 # Output details
 
+
 def _write_json_lines(
     books: list[BookCanonical],
     acquisitions: dict[CanonicalKey, BookAcquisition],
@@ -122,7 +122,7 @@ def _write_json_lines(
                 acquisitions.get(book.key),
                 readings.get(book.key),
                 resolutions.get(str(book.key)),
-            )
+            ),
         )
         click.echo(json.dumps(record, ensure_ascii=False))
 
@@ -148,7 +148,7 @@ def _write_tsv(
                     "" if values[header] is None else values[header]
                     for header in _OVERVIEW_HEADERS[len(HEADERS) :]
                 ),
-            ]
+            ],
         )
 
 
@@ -166,17 +166,17 @@ def _overview_values(
         "acquired_sample": _timestamp(acquired_sample),
         "acquired_book": _timestamp(acquired_book),
         "reading_ds_start": _timestamp(
-            device_summary.start if device_summary else None
+            device_summary.start if device_summary else None,
         ),
         "reading_ds_end": _timestamp(device_summary.end if device_summary else None),
         "reading_ds_total_reading_humanized": (
             device_summary.total_reading_humanized if device_summary else None
         ),
         "reading_ws_start": _timestamp(
-            whispersync_summary.start if whispersync_summary else None
+            whispersync_summary.start if whispersync_summary else None,
         ),
         "reading_ws_end": _timestamp(
-            whispersync_summary.end if whispersync_summary else None
+            whispersync_summary.end if whispersync_summary else None,
         ),
         "reading_ws_dates_unique": (
             whispersync_summary.dates_unique if whispersync_summary else 0

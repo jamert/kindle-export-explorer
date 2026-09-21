@@ -6,7 +6,11 @@ import pytest
 from click.testing import CliRunner
 
 from kindle_export_explorer.cli import main
-from kindle_export_explorer.resolutions import ReadStatus, load_resolutions, resolution_path
+from kindle_export_explorer.resolutions import (
+    ReadStatus,
+    load_resolutions,
+    resolution_path,
+)
 
 
 def _write_csv(
@@ -32,11 +36,7 @@ def _write_book(
     sample: bool = False,
     default: bool = False,
 ) -> None:
-    path = (
-        root
-        / "Digital.Content.Ownership"
-        / f"Digital.Content.Ownership.{asin}.json"
-    )
+    path = root / "Digital.Content.Ownership" / f"Digital.Content.Ownership.{asin}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(
@@ -44,9 +44,7 @@ def _write_book(
                 "resource": {
                     "ASIN": asin,
                     "Product Name": title,
-                    "resourceType": (
-                        "KindleEBookSample" if sample else "KindleEBook"
-                    ),
+                    "resourceType": ("KindleEBookSample" if sample else "KindleEBook"),
                 },
                 "rights": [
                     {
@@ -56,12 +54,14 @@ def _write_book(
                             "originType": (
                                 "Sample"
                                 if sample
-                                else "KindleDictionary" if default else "Purchase"
-                            )
+                                else "KindleDictionary"
+                                if default
+                                else "Purchase"
+                            ),
                         },
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -133,7 +133,7 @@ def test_resolve_reading_saves_each_answer_skips_existing_and_allows_override(
     interrupted = runner.invoke(main, ["resolve-reading", str(export)], input="Y\n")
     assert interrupted.exit_code == 1
     assert interrupted.output.index("Title: Newer Book") < interrupted.output.index(
-        "Title: Older Book"
+        "Title: Older Book",
     )
     assert "Author: New Author" in interrupted.output
     assert "Acquired: 2025-01-01T00:00:00Z" in interrupted.output
@@ -165,7 +165,10 @@ def test_resolve_reading_saves_each_answer_skips_existing_and_allows_override(
 
     complete = runner.invoke(main, ["resolve-reading", str(export)])
     assert complete.exit_code == 0
-    assert "all selected Kindle records already have a reading resolution" in complete.output
+    assert (
+        "all selected Kindle records already have a reading resolution"
+        in complete.output
+    )
 
     excluded = runner.invoke(
         main,

@@ -4,9 +4,8 @@ import pytest
 
 from tests.plugins.file_io_boundaries import FileIOBoundaryPlugin
 
-
 _FILE_IO_PLUGIN = FileIOBoundaryPlugin.from_path(
-    Path(__file__).parents[1] / "pyproject.toml"
+    Path(__file__).parents[1] / "pyproject.toml",
 )
 
 

@@ -15,7 +15,7 @@ class Boundary:
         module, separator, qualname = value.partition(":")
         if not separator or not module or not qualname:
             raise ValueError(
-                f"invalid boundary {value!r}; expected '<module>:<qualified name>'"
+                f"invalid boundary {value!r}; expected '<module>:<qualified name>'",
             )
         return cls(module, qualname)
 

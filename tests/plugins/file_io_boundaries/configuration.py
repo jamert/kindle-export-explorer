@@ -10,7 +10,6 @@ from typing import cast
 
 from .model import Boundary
 
-
 _CONFIG_LOCATION = "tool.kindle-export-explorer.file-io-boundaries"
 
 
@@ -70,10 +69,10 @@ def _nested_table(
 
 def _string_keyed_table(value: object, location: str) -> dict[str, object]:
     if not isinstance(value, dict):
-        raise ValueError(f"{location}: expected a table")
-    table = cast(dict[object, object], value)
+        raise TypeError(f"{location}: expected a table")
+    table = cast("dict[object, object]", value)
     if not all(isinstance(key, str) for key in table):
-        raise ValueError(f"{location}: expected string keys")
+        raise TypeError(f"{location}: expected string keys")
     return {str(key): item for key, item in table.items()}
 
 
@@ -83,8 +82,8 @@ def _optional_string_list(value: object, location: str) -> list[str]:
 
 def _string_list(value: object, location: str) -> list[str]:
     if not isinstance(value, list):
-        raise ValueError(f"{location}: expected an array of strings")
-    items = cast(list[object], value)
+        raise TypeError(f"{location}: expected an array of strings")
+    items = cast("list[object]", value)
     if not all(isinstance(item, str) for item in items):
-        raise ValueError(f"{location}: expected an array of strings")
+        raise TypeError(f"{location}: expected an array of strings")
     return [item for item in items if isinstance(item, str)]

@@ -4,11 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Callable, Iterator, cast
+from typing import cast
 
 from .books import (
     CanonicalKey,
@@ -19,8 +20,8 @@ from .books import (
     clean,
 )
 
-
 # Canonical acquisition model
+
 
 class AcquisitionEventType(StrEnum):
     SAMPLE_ACQUIRED = "sample_acquired"
@@ -69,16 +70,13 @@ class BookAcquisition:
         *event_types: AcquisitionEventType,
     ) -> datetime | None:
         return next(
-            (
-                event.timestamp
-                for event in self.events
-                if event.type in event_types
-            ),
+            (event.timestamp for event in self.events if event.type in event_types),
             None,
         )
 
 
 # Public reconstruction pipeline
+
 
 def reconstruct_acquisitions(
     root: Path,
@@ -103,6 +101,7 @@ def reconstruct_acquisitions(
 
 
 # Canonical conversion
+
 
 class AcquisitionCanonicalizationService:
     """Convert ownership-specific acquisition evidence into event timelines."""
@@ -133,7 +132,9 @@ class AcquisitionCanonicalizationService:
     @staticmethod
     def _events(
         records: tuple[
-            KindleAcquisitionRecord | PrintAcquisitionRecord | DocumentAcquisitionRecord,
+            KindleAcquisitionRecord
+            | PrintAcquisitionRecord
+            | DocumentAcquisitionRecord,
             ...,
         ],
     ) -> list[AcquisitionEvent]:
@@ -146,6 +147,7 @@ class AcquisitionCanonicalizationService:
 
 
 # Ownership-specific source records
+
 
 @dataclass(frozen=True)
 class KindleAcquisitionRecord:
@@ -175,6 +177,7 @@ class DocumentAcquisitionRecord:
 
 
 # Source record collection
+
 
 class AcquisitionSourceCatalog:
     """Deduplicate source acquisition evidence by identifier, event, and time."""
@@ -237,14 +240,14 @@ def _assemble_acquisition_records(
         recognized = True
     for path in ownership_paths:
         try:
-            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
+            value = cast("object", json.loads(path.read_text(encoding="utf-8-sig")))
             if not isinstance(value, dict):
-                raise AttributeError("expected a JSON object")
-            data = cast(dict[str, object], value)
+                raise TypeError("expected a JSON object")
+            data = cast("dict[str, object]", value)
             resource_value = data.get("resource", {})
             if not isinstance(resource_value, dict):
-                raise AttributeError("resource must be an object")
-            resource = cast(dict[str, object], resource_value)
+                raise TypeError("resource must be an object")
+            resource = cast("dict[str, object]", resource_value)
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
         asin = clean(resource.get("ASIN"))
@@ -252,19 +255,21 @@ def _assemble_acquisition_records(
             continue
         kindle_asins.add(asin)
         rights_value = data.get("rights", [])
-        rights = cast(list[object], rights_value) if isinstance(rights_value, list) else []
+        rights = (
+            cast("list[object]", rights_value) if isinstance(rights_value, list) else []
+        )
         for right_value in rights:
             if not isinstance(right_value, dict):
                 continue
-            right = cast(dict[str, object], right_value)
+            right = cast("dict[str, object]", right_value)
             if clean(right.get("rightType")).casefold() != "download":
                 continue
             origin_value = right.get("origin", {})
             if not isinstance(origin_value, dict):
                 continue
-            origin = cast(dict[str, object], origin_value)
+            origin = cast("dict[str, object]", origin_value)
             event_type = _ORIGIN_EVENT_TYPES.get(
-                clean(origin.get("originType")).casefold()
+                clean(origin.get("originType")).casefold(),
             )
             if event_type is None:
                 continue
@@ -273,7 +278,7 @@ def _assemble_acquisition_records(
                     asin=asin,
                     event_type=event_type,
                     timestamp=_parse_timestamp(right.get("acquiredDate")),
-                )
+                ),
             )
 
     relationship_paths = files.named("CustomerRelationshipIndex")
@@ -294,7 +299,7 @@ def _assemble_acquisition_records(
             PrintAcquisitionRecord(
                 asin=asin,
                 timestamp=_parse_timestamp(row.get("Relationship Creation Date")),
-            )
+            ),
         )
 
     document_paths = files.named("DocumentMetadata")
@@ -310,7 +315,7 @@ def _assemble_acquisition_records(
                 DocumentAcquisitionRecord(
                     document_id=document_id,
                     timestamp=_parse_timestamp(row.get("EntryCreationDate")),
-                )
+                ),
             )
 
     if not recognized:
@@ -355,7 +360,7 @@ def _parse_timestamp(value: object) -> datetime | None:
     if not timestamp:
         return None
     try:
-        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return datetime.fromisoformat(timestamp)
     except ValueError:
         return None
 

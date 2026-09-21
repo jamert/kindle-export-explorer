@@ -9,7 +9,6 @@ import sys
 from collections.abc import Callable, Sequence
 from types import CodeType, FrameType
 
-
 _TOOL_NAME = "file-io-boundary-guard"
 _DIRECTORY_READ_EVENTS = frozenset({"os.listdir", "os.scandir"})
 _STDIN_READ_METHODS = frozenset(
@@ -22,7 +21,7 @@ _STDIN_READ_METHODS = frozenset(
         "readinto1",
         "readline",
         "readlines",
-    }
+    },
 )
 
 
@@ -74,7 +73,7 @@ class CallMonitoringTool:
         )
         if tool_id is None:
             raise RuntimeError(
-                "cannot monitor stdin reads: no sys.monitoring tool ID is free"
+                "cannot monitor stdin reads: no sys.monitoring tool ID is free",
             )
         sys.monitoring.use_tool_id(tool_id, _TOOL_NAME)
         return tool_id

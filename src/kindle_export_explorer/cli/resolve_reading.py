@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import click
@@ -19,7 +19,6 @@ from ..resolutions import (
     save_resolutions,
 )
 from .utils import identifier_predicate, keys_predicate, parse_identifiers
-
 
 _RESPONSES = {
     "y": ReadStatus.YES,
@@ -117,7 +116,7 @@ def resolve_reading(
         record = ManualResolution(
             key=str(book.key),
             resolution=status,
-            updated_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(UTC),
         )
         resolutions[record.key] = record
         try:
@@ -161,7 +160,7 @@ def _acquisition_sort_value(acquisition: BookAcquisition | None) -> float:
     if acquired is None:
         return float("-inf")
     if acquired.tzinfo is None:
-        acquired = acquired.replace(tzinfo=timezone.utc)
+        acquired = acquired.replace(tzinfo=UTC)
     return acquired.timestamp()
 
 

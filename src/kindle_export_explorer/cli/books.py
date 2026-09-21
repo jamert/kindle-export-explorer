@@ -22,11 +22,11 @@ from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from .utils import identifier_predicate, keys_predicate, parse_identifiers
 
-
 _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 
 
 # Command overview
+
 
 @click.command(context_settings={"help_option_names": ["-h", "--help"]})
 @click.option(
@@ -129,6 +129,7 @@ def books(
 
 # CLI implementation details
 
+
 def _write_json_lines(
     books: list[BookCanonical],
     extra: bool,
@@ -163,7 +164,9 @@ def _acquisition_values(
     acquired_sample = acquisition.acquired_sample if acquisition else None
     acquired_book = acquisition.acquired_book if acquisition else None
     return {
-        "acquired_sample": format_datetime(acquired_sample) if acquired_sample else None,
+        "acquired_sample": format_datetime(acquired_sample)
+        if acquired_sample
+        else None,
         "acquired_book": format_datetime(acquired_book) if acquired_book else None,
     }
 

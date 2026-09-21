@@ -24,7 +24,6 @@ from kindle_export_explorer.books import (
 )
 from kindle_export_explorer.paths import resolve_export_path
 
-
 LOW_CARDINALITY_LIMIT = 10
 EXAMPLE_LIMIT = 5
 EXAMPLE_LENGTH_LIMIT = 160
@@ -97,13 +96,13 @@ def _flatten_json(value: object, prefix: str = "") -> dict[str, list[object]]:
     """Flatten a JSON record while preserving repeated values from arrays."""
     result: dict[str, list[object]] = {}
     if isinstance(value, dict):
-        mapping = cast(dict[str, object], value)
+        mapping = cast("dict[str, object]", value)
         for name, child in mapping.items():
             child_prefix = f"{prefix}.{name}" if prefix else name
             for column, values in _flatten_json(child, child_prefix).items():
                 result.setdefault(column, []).extend(values)
     elif isinstance(value, list):
-        items = cast(list[object], value)
+        items = cast("list[object]", value)
         list_prefix = f"{prefix}[]"
         for child in items:
             for column, values in _flatten_json(child, list_prefix).items():
@@ -135,11 +134,13 @@ def _csv_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
 
 def _json_records(path: ExportPath) -> Iterator[dict[str, list[object]]]:
     with path.open(encoding="utf-8-sig") as stream:
-        data = cast(object, json.load(stream))
-    records: list[object] = cast(list[object], data) if isinstance(data, list) else [data]
+        data = cast("object", json.load(stream))
+    records: list[object] = (
+        cast("list[object]", data) if isinstance(data, list) else [data]
+    )
     for record in records:
         if isinstance(record, dict):
-            yield _flatten_json(cast(dict[str, object], record))
+            yield _flatten_json(cast("dict[str, object]", record))
         else:
             yield {"<value>": [record]}
 
@@ -177,9 +178,7 @@ def _value_summary(column: ColumnProfile) -> str:
     values = sorted(column.values, key=str.casefold)
     if len(values) <= LOW_CARDINALITY_LIMIT:
         return "all: " + ", ".join(_display_value(value) for value in values)
-    return "examples: " + ", ".join(
-        _display_value(value) for value in column.examples
-    )
+    return "examples: " + ", ".join(_display_value(value) for value in column.examples)
 
 
 def _display_path(profile: DatasetProfile) -> str:
@@ -229,7 +228,8 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
     _write_toc_group("All files", indexed_paths, output)
 
     for number, (profile, display_path) in enumerate(
-        zip(profile_list, display_paths, strict=True), 1
+        zip(profile_list, display_paths, strict=True),
+        1,
     ):
         print(file=output)
         print(f'<a id="dataset-{number}"></a>', file=output)
@@ -247,7 +247,8 @@ def write_markdown(profiles: Iterable[DatasetProfile], stream: TextIO) -> None:
         )
         print("|---|---:|---:|---:|---:|:---:|---|", file=output)
         for name, column in sorted(
-            profile.columns.items(), key=lambda item: item[0].casefold()
+            profile.columns.items(),
+            key=lambda item: item[0].casefold(),
         ):
             empty = profile.record_count - column.populated_records
             escaped_name = name.replace("|", "\\|")
@@ -275,7 +276,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Kindle directory or ZIP archive (or set KINDLE_EXPORT_PATH)",
     )
     parser.add_argument(
-        "-o", "--output", type=Path, help="Write Markdown to this file instead of stdout"
+        "-o",
+        "--output",
+        type=Path,
+        help="Write Markdown to this file instead of stdout",
     )
     return parser.parse_args(argv)
 

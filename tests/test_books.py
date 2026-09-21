@@ -16,7 +16,9 @@ from kindle_export_explorer.books import normalize_sharded_path, reconstruct_boo
 from kindle_export_explorer.cli import books as main
 
 
-def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
+def write_csv(
+    root: Path, relative: str, headers: list[str], rows: list[list[str]]
+) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as stream:
@@ -65,7 +67,9 @@ def test_canonicalization_service_keeps_source_record_types_separate() -> None:
     assert not hasattr(document, "marketplaces")
 
 
-def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path) -> None:
+def test_normalize_sharded_path_only_collapses_real_shard_groups(
+    tmp_path: Path,
+) -> None:
     shards = tmp_path / "Digital.Content.Ownership"
     shards.mkdir()
     first = shards / "Digital.Content.Ownership.1.json"
@@ -102,8 +106,12 @@ def test_normalize_sharded_path_only_collapses_real_shard_groups(tmp_path: Path)
         )
 
 
-def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path) -> None:
-    ownership = tmp_path / "Digital.Content.Ownership" / "Digital.Content.Ownership.1.json"
+def test_reconstructs_and_enriches_books_without_activity_fields(
+    tmp_path: Path,
+) -> None:
+    ownership = (
+        tmp_path / "Digital.Content.Ownership" / "Digital.Content.Ownership.1.json"
+    )
     ownership.parent.mkdir()
     ownership.write_text(
         json.dumps({"resource": {"ASIN": "BOOK1", "Product Name": "Old title"}}),
@@ -112,7 +120,14 @@ def test_reconstructs_and_enriches_books_without_activity_fields(tmp_path: Path)
     write_csv(
         tmp_path,
         "uli/CustomerRelationshipIndex.1.csv",
-        ["ASIN", "Product Name", "Resource Type", "Ownership Type", "Series Title", "Position In Collection"],
+        [
+            "ASIN",
+            "Product Name",
+            "Resource Type",
+            "Ownership Type",
+            "Series Title",
+            "Position In Collection",
+        ],
         [
             [
                 "BOOK1",
@@ -324,7 +339,17 @@ def test_extra_adds_series_genres_and_link(tmp_path: Path) -> None:
             "Position In Collection",
             "Marketplace",
         ],
-        [["PRINT", "Print Book", "ITEM", "Item Owner", "Series", "2", "www.amazon.com"]],
+        [
+            [
+                "PRINT",
+                "Print Book",
+                "ITEM",
+                "Item Owner",
+                "Series",
+                "2",
+                "www.amazon.com",
+            ]
+        ],
     )
     write_csv(
         tmp_path,
@@ -423,7 +448,9 @@ def test_canonical_uses_sortable_author_only_as_fallback(
     assert "using www.amazon.com" in result.stderr
 
 
-def test_source_filters_kindle_and_print_from_provenance_not_asin(tmp_path: Path) -> None:
+def test_source_filters_kindle_and_print_from_provenance_not_asin(
+    tmp_path: Path,
+) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
     (ownership / "Digital.Content.Ownership.1.json").write_text(
@@ -516,7 +543,9 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
     assert "COMPLETED" not in result.output
 
 
-def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Path) -> None:
+def test_json_and_jsonl_aliases_print_json_lines_with_native_types(
+    tmp_path: Path,
+) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
     (ownership / "Digital.Content.Ownership.1.json").write_text(
@@ -535,7 +564,9 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(tmp_path: Pat
 
     runner = CliRunner()
     for option in ("--json", "--jsonl"):
-        result = runner.invoke(main, [option, "--show-samples", "--extra", str(tmp_path)])
+        result = runner.invoke(
+            main, [option, "--show-samples", "--extra", str(tmp_path)]
+        )
         assert result.exit_code == 0
         lines = result.output.splitlines()
         assert len(lines) == 1

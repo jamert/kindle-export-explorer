@@ -6,13 +6,13 @@ import csv
 import json
 import re
 import sys
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Iterator, TypeAlias, cast
-from zipfile import BadZipFile, Path as ZipPath, ZipFile, is_zipfile
-
+from typing import Any, cast
+from zipfile import BadZipFile, ZipFile, is_zipfile
+from zipfile import Path as ZipPath
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
 _DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}
@@ -25,10 +25,11 @@ class ExportError(ValueError):
     """Raised when a path is not a recognizable Kindle export."""
 
 
-ExportPath: TypeAlias = Path | ZipPath
+type ExportPath = Path | ZipPath
 
 
 # Canonical output model
+
 
 @dataclass(frozen=True)
 class CanonicalKey:
@@ -41,7 +42,7 @@ class CanonicalKey:
         return f"asin:{self.asin or ''}"
 
 
-CanonicalKeyPredicate: TypeAlias = Callable[[CanonicalKey], bool]
+type CanonicalKeyPredicate = Callable[[CanonicalKey], bool]
 
 
 @dataclass(frozen=True)
@@ -176,6 +177,7 @@ EXTRA_HEADERS = [
 
 # Public reconstruction pipeline
 
+
 def reconstruct_books(
     root: Path,
     *,
@@ -212,6 +214,7 @@ def reconstruct_books(
 
 
 # Canonical conversion
+
 
 class CanonicalizationService:
     """Convert ownership-specific source records into canonical books."""
@@ -309,7 +312,11 @@ class CanonicalizationService:
         preferred = sorted(records, key=lambda record: record.sample)
         merged = BookMetadata(
             title=next(
-                (record.metadata.title for record in preferred if record.metadata.title),
+                (
+                    record.metadata.title
+                    for record in preferred
+                    if record.metadata.title
+                ),
                 "",
             )
         )
@@ -335,6 +342,7 @@ class CanonicalizationService:
 
 
 # Ownership-specific source records
+
 
 @dataclass
 class BookMetadata:
@@ -420,6 +428,7 @@ AsinBookRecord = KindleBookRecord | PrintBookRecord
 
 
 # Source record collection
+
 
 class SourceRecordCatalog:
     """Keep selected ownership records separate and deduplicate by source key."""
@@ -566,6 +575,7 @@ class SourceRecordCatalog:
 
 # Parsing and export-format details
 
+
 def clean(value: object) -> str:
     if value is None:
         return ""
@@ -606,9 +616,7 @@ def _joined(values: Iterable[str]) -> str:
 
 
 def _marketplace_domain(value: str) -> str:
-    without_scheme = (
-        value.casefold().removeprefix("https://").removeprefix("http://")
-    )
+    without_scheme = value.casefold().removeprefix("https://").removeprefix("http://")
     return without_scheme.split("/", 1)[0]
 
 
@@ -620,7 +628,11 @@ def _select_marketplace(key: str, values: set[str]) -> str:
         key=lambda value: (_marketplace_domain(value), value.casefold()),
     )
     preferred = next(
-        (value for value in ordered if _marketplace_domain(value).endswith("amazon.com")),
+        (
+            value
+            for value in ordered
+            if _marketplace_domain(value).endswith("amazon.com")
+        ),
         ordered[0],
     )
     if len(values) > 1:
@@ -637,9 +649,7 @@ def _clean_identifier(value: object) -> str:
     return "" if result.casefold() == "invalid-asin" else result
 
 
-_SERIES_TITLE_WITH_ASIN = re.compile(
-    r"^(?P<title>.+?)\s+(?P<asin>B[0-9A-Z]{9})$"
-)
+_SERIES_TITLE_WITH_ASIN = re.compile(r"^(?P<title>.+?)\s+(?P<asin>B[0-9A-Z]{9})$")
 _NUMBERED_SHARD = re.compile(r"^(?P<base>.+)\.(?P<number>\d+)(?P<extension>\.[^.]+)$")
 _VERSIONED_DATASET = re.compile(r"^(?P<base>.+)\.\d+\.\d+$")
 
@@ -845,11 +855,11 @@ def _assemble_source_records(
         try:
             value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
             if not isinstance(value, dict):
-                raise AttributeError("expected a JSON object")
+                raise TypeError("expected a JSON object")
             data = cast(dict[str, object], value)
             resource_value = data.get("resource", {})
             if not isinstance(resource_value, dict):
-                raise AttributeError("resource must be an object")
+                raise TypeError("resource must be an object")
             resource = cast(dict[str, object], resource_value)
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
@@ -999,9 +1009,7 @@ def _assemble_source_records(
     for _, row in _csv_rows(
         files.root,
         saga_paths,
-        lambda row: catalog.has_records_for_asin(
-            clean_item_asin(row.get("item-ASIN"))
-        ),
+        lambda row: catalog.has_records_for_asin(clean_item_asin(row.get("item-ASIN"))),
     ):
         if clean(row.get("record-type")).casefold() != "item":
             continue

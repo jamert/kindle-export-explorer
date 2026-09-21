@@ -39,7 +39,6 @@ from .reading import (
 )
 from .resolutions import ManualResolution, ReadStatus, ResolutionError
 
-
 __all__ = [
     "AcquisitionCanonicalizationService",
     "AcquisitionEvent",
@@ -50,9 +49,9 @@ __all__ = [
     "BookCanonical",
     "BookMetadata",
     "BookReading",
-    "CanonicalizationService",
     "CanonicalKey",
     "CanonicalKeyPredicate",
+    "CanonicalizationService",
     "DeviceReadingSessionRecord",
     "DeviceSessionsSummary",
     "DigitalOwnership",
@@ -64,9 +63,9 @@ __all__ = [
     "ManualResolution",
     "PrintAcquisitionRecord",
     "PrintBookRecord",
+    "ReadStatus",
     "ReadingActionContainerRecord",
     "ReadingInsightsSessionRecord",
-    "ReadStatus",
     "ResolutionError",
     "Series",
     "TitleCompletionRecord",

@@ -1,6 +1,6 @@
 import csv
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -15,7 +15,12 @@ from kindle_export_explorer import (
 from kindle_export_explorer.cli import books as main
 
 
-def write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
+def write_csv(
+    root: Path,
+    relative: str,
+    headers: list[str],
+    rows: list[list[str]],
+) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as stream:
@@ -45,11 +50,11 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
                             {
                                 "resourceItemType": "Content",
                                 "startDate": "2024-01-01T10:05:00Z",
-                            }
+                            },
                         ],
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -62,9 +67,9 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
                         "rightType": "Download",
                         "acquiredDate": "2024-01-03T12:00:00Z",
                         "origin": {"originType": "Purchase"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -104,30 +109,44 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         AcquisitionEventType.KINDLE_PURCHASED,
     ]
     assert [event.timestamp for event in by_key["asin:BOOK"].events] == [
-        datetime(2024, 1, 1, 10, tzinfo=timezone.utc),
-        datetime(2024, 1, 3, 12, tzinfo=timezone.utc),
+        datetime(2024, 1, 1, 10, tzinfo=UTC),
+        datetime(2024, 1, 3, 12, tzinfo=UTC),
     ]
     assert by_key["asin:BOOK"].acquired_sample == datetime(
-        2024, 1, 1, 10, tzinfo=timezone.utc
+        2024,
+        1,
+        1,
+        10,
+        tzinfo=UTC,
     )
     assert by_key["asin:BOOK"].acquired_book == datetime(
-        2024, 1, 3, 12, tzinfo=timezone.utc
+        2024,
+        1,
+        3,
+        12,
+        tzinfo=UTC,
     )
-    assert by_key["asin:PRINT"].events[0].type == (
-        AcquisitionEventType.PRINT_ACQUIRED
-    )
+    assert by_key["asin:PRINT"].events[0].type == (AcquisitionEventType.PRINT_ACQUIRED)
     assert by_key["asin:PRINT"].events[0].timestamp == datetime(
-        2023, 2, 1, 9, tzinfo=timezone.utc
+        2023,
+        2,
+        1,
+        9,
+        tzinfo=UTC,
     )
     assert by_key["asin:PRINT"].acquired_sample is None
     assert by_key["asin:PRINT"].acquired_book == datetime(
-        2023, 2, 1, 9, tzinfo=timezone.utc
+        2023,
+        2,
+        1,
+        9,
+        tzinfo=UTC,
     )
     assert by_key["document:DOC"].events[0].type == (
         AcquisitionEventType.DOCUMENT_CREATED
     )
     assert all(
-        event.timestamp != datetime(2024, 1, 1, 10, 5, tzinfo=timezone.utc)
+        event.timestamp != datetime(2024, 1, 1, 10, 5, tzinfo=UTC)
         for event in by_key["asin:BOOK"].events
     )
 
@@ -141,16 +160,10 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
         row["key"]: row
         for row in csv.DictReader(tsv_result.output.splitlines(), dialect="excel-tab")
     }
-    assert tsv_rows["asin:BOOK"]["acquired_sample"] == (
-        "2024-01-01T10:00:00Z"
-    )
-    assert tsv_rows["asin:BOOK"]["acquired_book"] == (
-        "2024-01-03T12:00:00Z"
-    )
+    assert tsv_rows["asin:BOOK"]["acquired_sample"] == ("2024-01-01T10:00:00Z")
+    assert tsv_rows["asin:BOOK"]["acquired_book"] == ("2024-01-03T12:00:00Z")
     assert tsv_rows["asin:PRINT"]["acquired_sample"] == ""
-    assert tsv_rows["asin:PRINT"]["acquired_book"] == (
-        "2023-02-01T09:00:00Z"
-    )
+    assert tsv_rows["asin:PRINT"]["acquired_book"] == ("2023-02-01T09:00:00Z")
 
     json_result = runner.invoke(
         main,
@@ -158,19 +171,16 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
     )
     assert json_result.exit_code == 0
     json_rows = {
-        row["key"]: row
-        for row in map(json.loads, json_result.output.splitlines())
+        row["key"]: row for row in map(json.loads, json_result.output.splitlines())
     }
     assert json_rows["document:DOC"]["acquired_sample"] is None
-    assert json_rows["document:DOC"]["acquired_book"] == (
-        "2022-03-04T05:06:07Z"
-    )
+    assert json_rows["document:DOC"]["acquired_book"] == ("2022-03-04T05:06:07Z")
 
 
 def test_acquisition_properties_do_not_depend_on_event_order() -> None:
-    early_sample = datetime(2024, 1, 1, tzinfo=timezone.utc)
-    early_purchase = datetime(2024, 1, 2, tzinfo=timezone.utc)
-    late_purchase = datetime(2024, 1, 3, tzinfo=timezone.utc)
+    early_sample = datetime(2024, 1, 1, tzinfo=UTC)
+    early_purchase = datetime(2024, 1, 2, tzinfo=UTC)
+    late_purchase = datetime(2024, 1, 3, tzinfo=UTC)
     acquisition = BookAcquisition(
         key=CanonicalKey(asin="BOOK"),
         events=[
@@ -201,9 +211,9 @@ def test_reconstructs_default_kindle_acquisition(tmp_path: Path) -> None:
                         "rightType": "Download",
                         "acquiredDate": "2020-01-01T00:00:00Z",
                         "origin": {"originType": "KindleDictionary"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )

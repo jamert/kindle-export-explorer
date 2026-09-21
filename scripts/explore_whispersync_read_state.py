@@ -7,13 +7,12 @@ import argparse
 import csv
 import sys
 from collections import defaultdict
+from collections.abc import Iterator
 from datetime import datetime
 from pathlib import Path
-from typing import Iterator
 
 from kindle_export_explorer.books import ExportFiles, ExportPath, clean
 from kindle_export_explorer.paths import resolve_export_path
-
 
 _ANNOTATION_TYPES = (
     "kindle.most_recent_read",
@@ -44,9 +43,7 @@ def main(argv: list[str] | None = None) -> None:
     if not paths:
         parser.error(f"no Whispersync CSV found in {root}")
 
-    updates: dict[datetime, dict[str, set[str]]] = defaultdict(
-        lambda: defaultdict(set)
-    )
+    updates: dict[datetime, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     for row in _csv_rows(paths):
         annotation_type = clean(row.get("Annotation Type"))
         asin = clean(row.get("ASIN"))
@@ -63,9 +60,9 @@ def main(argv: list[str] | None = None) -> None:
             "ts",
             "most_recent_read",
             "last_read",
-        ]
+        ],
     )
-    state = {annotation_type: "" for annotation_type in _ANNOTATION_TYPES}
+    state: dict[str, str] = dict.fromkeys(_ANNOTATION_TYPES, "")
     for timestamp in sorted(updates):
         previous_state = state.copy()
         for annotation_type, asins in updates[timestamp].items():
@@ -83,7 +80,7 @@ def main(argv: list[str] | None = None) -> None:
                     state["kindle.last_read"],
                     previous_state["kindle.last_read"],
                 ),
-            ]
+            ],
         )
 
 
@@ -98,7 +95,7 @@ def _parse_timestamp(value: object) -> datetime | None:
     if not timestamp:
         return None
     try:
-        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return datetime.fromisoformat(timestamp)
     except ValueError:
         return None
 

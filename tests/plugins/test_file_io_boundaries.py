@@ -30,10 +30,10 @@ def test_allows_reads_when_configured_boundary_is_on_stack(tmp_path: Path) -> No
                     Boundary(
                         __name__,
                         _read_under_allowed_boundary.__qualname__,
-                    )
-                }
+                    ),
+                },
             ),
-        )
+        ),
     )
 
     guard.install()
@@ -52,7 +52,7 @@ def test_aggregates_reads_without_configured_boundary(tmp_path: Path) -> None:
         FileIOConfiguration(
             source_roots=(Path(__file__).parent,),
             allowed_reads=frozenset(),
-        )
+        ),
     )
 
     guard.install()
@@ -90,7 +90,7 @@ def test_monitors_arbitrary_standard_input_reads(
         FileIOConfiguration(
             source_roots=(Path(__file__).parent,),
             allowed_reads=frozenset(),
-        )
+        ),
     )
 
     guard.install()

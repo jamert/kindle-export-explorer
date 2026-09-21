@@ -20,7 +20,20 @@ dev = [
     "pre-commit>=4.6.2",
     "pyright>=1.1.411",
     "pytest>=9.1.1",
+    "ruff>=0.16.8",
 ]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+extend-select = ["D100"]
+ignore = [
+    "PIE807", # allows `lambda: []` for pyright
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D100"]
 
 [tool.pyright]
 typeCheckingMode = "strict"

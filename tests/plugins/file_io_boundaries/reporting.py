@@ -50,7 +50,7 @@ def _standard_stack_lines(frames: Sequence[ApplicationFrame]) -> list[str]:
     for frame in frames:
         lines.append(
             f'  File "{frame.filename}", line {frame.lineno}, '
-            f"in {frame.boundary.qualname}"
+            f"in {frame.boundary.qualname}",
         )
         source = linecache.getline(frame.filename, frame.lineno).strip()
         if source:

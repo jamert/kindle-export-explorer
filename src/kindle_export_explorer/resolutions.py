@@ -12,7 +12,6 @@ from typing import cast
 
 from .formatting import format_datetime
 
-
 _APPLICATION_DIRECTORY = "kindle-export-explorer"
 _RESOLUTION_FILENAME = "resolution.json"
 
@@ -38,7 +37,9 @@ class ManualResolution:
 def resolution_path() -> Path:
     """Return the resolution file under XDG_CONFIG_HOME or ~/.config."""
     configured = os.environ.get("XDG_CONFIG_HOME")
-    config_home = Path(configured).expanduser() if configured else Path.home() / ".config"
+    config_home = (
+        Path(configured).expanduser() if configured else Path.home() / ".config"
+    )
     return config_home / _APPLICATION_DIRECTORY / _RESOLUTION_FILENAME
 
 
@@ -48,52 +49,48 @@ def load_resolutions(path: Path | None = None) -> dict[str, ManualResolution]:
     if not resolved_path.exists():
         return {}
     try:
-        value = cast(
-            object, json.loads(resolved_path.read_text(encoding="utf-8"))
-        )
+        value = cast("object", json.loads(resolved_path.read_text(encoding="utf-8")))
     except (OSError, UnicodeError, json.JSONDecodeError) as exc:
         raise ResolutionError(f"cannot read {resolved_path}: {exc}") from exc
     if not isinstance(value, list):
         raise ResolutionError(f"cannot read {resolved_path}: expected a JSON array")
 
-    items = cast(list[object], value)
+    items = cast("list[object]", value)
     result: dict[str, ManualResolution] = {}
     for index, item in enumerate(items):
         if not isinstance(item, dict):
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} must be an object"
+                f"cannot read {resolved_path}: record {index} must be an object",
             )
-        record = cast(dict[str, object], item)
+        record = cast("dict[str, object]", item)
         key = record.get("key")
         resolution_value = record.get("resolution")
         updated_at_value = record.get("updated_at")
         if not isinstance(key, str) or not key:
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} has an invalid key"
+                f"cannot read {resolved_path}: record {index} has an invalid key",
             )
         if key in result:
             raise ResolutionError(f"cannot read {resolved_path}: duplicate key {key}")
         if not isinstance(resolution_value, str):
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} has an invalid resolution"
+                f"cannot read {resolved_path}: record {index} has an invalid resolution",
             )
         try:
             resolution = ReadStatus(resolution_value)
         except ValueError as exc:
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} has an invalid resolution"
+                f"cannot read {resolved_path}: record {index} has an invalid resolution",
             ) from exc
         if not isinstance(updated_at_value, str):
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} has an invalid updated_at"
+                f"cannot read {resolved_path}: record {index} has an invalid updated_at",
             )
         try:
-            updated_at = datetime.fromisoformat(
-                updated_at_value.replace("Z", "+00:00")
-            )
+            updated_at = datetime.fromisoformat(updated_at_value)
         except ValueError as exc:
             raise ResolutionError(
-                f"cannot read {resolved_path}: record {index} has an invalid updated_at"
+                f"cannot read {resolved_path}: record {index} has an invalid updated_at",
             ) from exc
         result[key] = ManualResolution(key, resolution, updated_at)
     return result

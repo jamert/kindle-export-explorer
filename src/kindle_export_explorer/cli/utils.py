@@ -6,7 +6,6 @@ import click
 
 from ..books import CanonicalKey, CanonicalKeyPredicate
 
-
 _IDENTIFIER_ERROR = "provide at least one key, ASIN, or document ID"
 
 
@@ -31,9 +30,8 @@ def identifier_predicate(
 
     def selected(key: CanonicalKey) -> bool:
         identifiers = _key_identifiers(key)
-        return (
-            (included is None or bool(identifiers & included))
-            and (excluded is None or not identifiers & excluded)
+        return (included is None or bool(identifiers & included)) and (
+            excluded is None or not identifiers & excluded
         )
 
     return selected

@@ -41,7 +41,7 @@ class ReadBoundaryEnforcer:
                         filename=str(filename),
                         lineno=frame.f_lineno,
                         boundary=Boundary(module_name, frame.f_code.co_qualname),
-                    )
+                    ),
                 )
             frame = frame.f_back
         frames.reverse()

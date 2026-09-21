@@ -20,7 +20,7 @@ def test_profiles_shards_csv_columns_and_json_arrays(tmp_path: Path) -> None:
                         {"type": "Download"},
                         {"type": "Read" if number == 1 else "Download"},
                     ],
-                }
+                },
             ),
             encoding="utf-8",
         )

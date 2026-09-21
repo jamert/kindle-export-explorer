@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
-from typing import Callable, Iterator
 
 from .books import (
     CanonicalKey,
@@ -17,8 +17,8 @@ from .books import (
     clean,
 )
 
-
 # Per-book reading record collection
+
 
 @dataclass(frozen=True)
 class DeviceSessionsSummary:
@@ -40,20 +40,20 @@ class WhispersyncRecordSummary:
 @dataclass
 class BookReading:
     key: CanonicalKey
-    device_sessions: list[DeviceReadingSessionRecord] = field(default_factory=lambda: [])
+    device_sessions: list[DeviceReadingSessionRecord] = field(
+        default_factory=lambda: [],
+    )
     insights_sessions: list[ReadingInsightsSessionRecord] = field(
-        default_factory=lambda: []
+        default_factory=lambda: [],
     )
     whispersync_records: list[WhispersyncRecord] = field(default_factory=lambda: [])
     reading_action_containers: list[ReadingActionContainerRecord] = field(
-        default_factory=lambda: []
+        default_factory=lambda: [],
     )
     auto_mark_as_read_records: list[AutoMarkAsReadRecord] = field(
-        default_factory=lambda: []
+        default_factory=lambda: [],
     )
-    completion_records: list[TitleCompletionRecord] = field(
-        default_factory=lambda: []
-    )
+    completion_records: list[TitleCompletionRecord] = field(default_factory=lambda: [])
 
     @property
     def device_sessions_summary(self) -> DeviceSessionsSummary | None:
@@ -109,6 +109,7 @@ class BookReading:
 
 # Public reconstruction pipeline
 
+
 def reconstruct_reading(
     root: Path,
     *,
@@ -121,6 +122,7 @@ def reconstruct_reading(
 
 
 # Source-specific reading records
+
 
 @dataclass(frozen=True)
 class DeviceReadingSessionRecord:
@@ -198,6 +200,7 @@ class TitleCompletionRecord:
 
 # Source record collection
 
+
 class ReadingSourceCatalog:
     def __init__(self) -> None:
         self._records: dict[CanonicalKey, BookReading] = {}
@@ -238,6 +241,7 @@ class ReadingSourceCatalog:
 
 
 # Aggregation details
+
 
 def _humanize_millis(value: int) -> str:
     total_minutes = (value + 30_000) // 60_000
@@ -288,7 +292,7 @@ def _assemble_reading_records(
                 device_software_version=clean(row.get("device_software_version")),
                 preferred_marketplace=clean(row.get("preferred_marketplace")),
                 purchased_marketplace=clean(row.get("purchased_marketplace")),
-            )
+            ),
         )
 
     paths = files.named("reading-insights-sessions_with_adjustments")
@@ -305,13 +309,11 @@ def _assemble_reading_records(
                 asin=asin,
                 start=_parse_timestamp(row.get("start_time")),
                 end=_parse_timestamp(row.get("end_time")),
-                total_reading_millis=_parse_int(
-                    row.get("total_reading_milliseconds")
-                ),
+                total_reading_millis=_parse_int(row.get("total_reading_milliseconds")),
                 product_name=clean(row.get("product_name")),
                 reading_marketplace=clean(row.get("reading_marketplace")),
                 personal_document_id=clean(row.get("personal_document_id")),
-            )
+            ),
         )
 
     paths = files.named("whispersync")
@@ -333,7 +335,7 @@ def _assemble_reading_records(
                 content_type=clean(row.get("ContentType")),
                 creation_date=_parse_timestamp(row.get("Creation Date")),
                 customer_modified_date=_parse_timestamp(
-                    row.get("Customer modified date on device")
+                    row.get("Customer modified date on device"),
                 ),
                 last_updated_date=_parse_timestamp(row.get("LastUpdatedDate")),
                 product_name=clean(row.get("Product Name")),
@@ -363,7 +365,7 @@ def _assemble_reading_records(
                 country=clean(row.get("country")),
                 device_family=clean(row.get("device_family")),
                 preferred_marketplace=clean(row.get("preferred_marketplace")),
-            )
+            ),
         )
 
     paths = files.named("autoMarkAsRead")
@@ -379,14 +381,12 @@ def _assemble_reading_records(
             AutoMarkAsReadRecord(
                 asin=asin,
                 created_at=_parse_timestamp(row.get("created_timestamp")),
-                file_auto_marked_as_read=clean(
-                    row.get("file_auto_marked_as_read")
-                ),
+                file_auto_marked_as_read=clean(row.get("file_auto_marked_as_read")),
                 content_type=clean(row.get("content_type")),
                 country=clean(row.get("country")),
                 device_family=clean(row.get("device_family")),
                 preferred_marketplace=clean(row.get("preferred_marketplace")),
-            )
+            ),
         )
 
     paths = files.named("UserUniqueTitlesCompleted")
@@ -406,7 +406,7 @@ def _assemble_reading_records(
                 completion_type=completion_type,
                 product_name=clean(row.get("product_name")),
                 personal_document_id=clean(row.get("personal_document_id")),
-            )
+            ),
         )
 
     if not recognized:
@@ -482,7 +482,7 @@ def _parse_timestamp(value: object) -> datetime | None:
     if not timestamp:
         return None
     try:
-        return datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
+        return datetime.fromisoformat(timestamp)
     except ValueError:
         return None
 

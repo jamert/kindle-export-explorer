@@ -16,7 +16,6 @@ from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
 from .utils import keys_predicate
 
-
 _OMITTED_RECORD_FIELDS = {
     "asin",
     "device_family",
@@ -103,9 +102,7 @@ def _reading_as_dict(reading: BookReading, title: str | None) -> dict[str, Any]:
     result: dict[str, Any] = {
         "key": str(reading.key),
         "title": title,
-        "device_sessions_summary": (
-            asdict(device_summary) if device_summary else None
-        ),
+        "device_sessions_summary": (asdict(device_summary) if device_summary else None),
         "whispersync_record_summary": asdict(reading.whispersync_record_summary),
     }
     for item in fields(reading):

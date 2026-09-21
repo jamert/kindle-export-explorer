@@ -1,6 +1,6 @@
 import csv
 import json
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -40,9 +40,9 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                         "rightType": "Download",
                         "acquiredDate": "2024-01-02T00:00:00Z",
                         "origin": {"originType": "Purchase"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -59,9 +59,9 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                         "rightType": "Download",
                         "acquiredDate": "2024-01-01T00:00:00Z",
                         "origin": {"originType": "Sample"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -78,9 +78,9 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                         "rightType": "Download",
                         "acquiredDate": "2020-01-01T00:00:00Z",
                         "origin": {"originType": "KindleDictionary"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -132,7 +132,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "2024-01-01T10:05:00Z",
                 "299500.0",
                 "Book",
-            ]
+            ],
         ],
     )
     write_csv(
@@ -221,7 +221,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
                 "2024-01-01T10:05:03Z",
                 "Before you go BSE",
                 "Reach end of book",
-            ]
+            ],
         ],
     )
     write_csv(
@@ -253,29 +253,48 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     assert len(book.device_sessions) == 2
     assert book.device_sessions[0].content_type == "E-Book Sample"
     assert book.device_sessions[0].start == datetime(
-        2024, 1, 1, 10, tzinfo=timezone.utc
+        2024,
+        1,
+        1,
+        10,
+        tzinfo=UTC,
     )
     assert book.device_sessions[0].total_reading_millis == 299500
     assert book.device_sessions[0].number_of_page_flips == 12
     device_summary = book.device_sessions_summary
     assert device_summary is not None
-    assert device_summary.start == datetime(2024, 1, 1, 10, tzinfo=timezone.utc)
-    assert device_summary.end == datetime(2024, 1, 1, 10, 7, tzinfo=timezone.utc)
+    assert device_summary.start == datetime(2024, 1, 1, 10, tzinfo=UTC)
+    assert device_summary.end == datetime(2024, 1, 1, 10, 7, tzinfo=UTC)
     assert device_summary.total_reading_millis == 299500
     assert device_summary.total_reading_humanized == "5m"
     assert device_summary.total_page_flips == 12
     assert device_summary.total_count == 1
     assert len(book.insights_sessions) == 1
     assert book.insights_sessions[0].start == datetime(
-        2024, 1, 1, 10, 0, 0, 500000, tzinfo=timezone.utc
+        2024,
+        1,
+        1,
+        10,
+        0,
+        0,
+        500000,
+        tzinfo=UTC,
     )
     assert len(book.whispersync_records) == 3
     assert book.whispersync_records[0].content_type == "EBSP"
     assert book.whispersync_record_summary.start == datetime(
-        2023, 12, 31, 12, tzinfo=timezone.utc
+        2023,
+        12,
+        31,
+        12,
+        tzinfo=UTC,
     )
     assert book.whispersync_record_summary.end == datetime(
-        2024, 1, 2, 13, tzinfo=timezone.utc
+        2024,
+        1,
+        2,
+        13,
+        tzinfo=UTC,
     )
     assert book.whispersync_record_summary.dates_unique == 2
     assert len(book.reading_action_containers) == 1
@@ -334,7 +353,7 @@ def test_collects_source_records_by_canonical_key(tmp_path: Path) -> None:
     overview_result = CliRunner().invoke(overview_main, [str(tmp_path)])
     assert overview_result.exit_code == 0
     overview_rows = list(
-        csv.DictReader(overview_result.output.splitlines(), dialect="excel-tab")
+        csv.DictReader(overview_result.output.splitlines(), dialect="excel-tab"),
     )
     assert [row["key"] for row in overview_rows] == ["asin:SAMPLE", "asin:BOOK"]
     assert overview_rows[0]["acquired_sample"] == "2024-01-01T00:00:00Z"

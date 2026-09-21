@@ -14,7 +14,12 @@ from scripts.explore_export import profile_export
 from scripts.explore_whispersync_read_state import main as whispersync_main
 
 
-def _write_csv(root: Path, relative: str, headers: list[str], rows: list[list[str]]) -> None:
+def _write_csv(
+    root: Path,
+    relative: str,
+    headers: list[str],
+    rows: list[list[str]],
+) -> None:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8", newline="") as stream:
@@ -39,9 +44,9 @@ def _make_export(root: Path) -> None:
                         "rightType": "Download",
                         "acquiredDate": "2025-01-02T03:04:05Z",
                         "origin": {"originType": "Purchase"},
-                    }
+                    },
                 ],
-            }
+            },
         ),
         encoding="utf-8",
     )
@@ -56,7 +61,16 @@ def _make_export(root: Path) -> None:
             "total_reading_millis",
             "number_of_page_flips",
         ],
-        [["BOOK1", "E-Book", "2025-02-01T10:00:00Z", "2025-02-01T10:05:00Z", "300000", "5"]],
+        [
+            [
+                "BOOK1",
+                "E-Book",
+                "2025-02-01T10:00:00Z",
+                "2025-02-01T10:05:00Z",
+                "300000",
+                "5",
+            ],
+        ],
     )
     _write_csv(
         root,
@@ -73,7 +87,9 @@ def _archive_directory(root: Path, archive: Path) -> None:
                 output.write(path, path.relative_to(root))
 
 
-def test_all_commands_and_exploration_match_directory_and_archive(tmp_path: Path) -> None:
+def test_all_commands_and_exploration_match_directory_and_archive(
+    tmp_path: Path,
+) -> None:
     root = tmp_path / "Kindle"
     root.mkdir()
     _make_export(root)
@@ -105,7 +121,8 @@ def test_all_commands_and_exploration_match_directory_and_archive(tmp_path: Path
 
 
 def test_environment_path_and_explicit_path_priority(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     root = tmp_path / "Kindle"
     root.mkdir()
