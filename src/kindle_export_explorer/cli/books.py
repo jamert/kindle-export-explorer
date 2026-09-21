@@ -44,6 +44,16 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
     help="Select books by format.",
 )
 @click.option(
+    "--include",
+    metavar="ID[,ID...]",
+    help="Only emit records matching these comma-separated keys, ASINs, or document IDs.",
+)
+@click.option(
+    "--exclude",
+    metavar="ID[,ID...]",
+    help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
+)
+@click.option(
     "--extra",
     is_flag=True,
     help="Include series, genres, and book/series links.",
@@ -60,16 +70,6 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
     is_flag=True,
     help="Write one JSON object per line instead of TSV.",
 )
-@click.option(
-    "--include",
-    metavar="ID[,ID...]",
-    help="Only emit records matching these comma-separated keys, ASINs, or document IDs.",
-)
-@click.option(
-    "--exclude",
-    metavar="ID[,ID...]",
-    help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
-)
 @click.argument(
     "export_path",
     required=False,
@@ -80,11 +80,11 @@ def books(
     show_default: bool,
     show_samples: bool,
     format: str,
+    include: str | None,
+    exclude: str | None,
     extra: bool,
     acquisition: bool,
     json_lines: bool,
-    include: str | None,
-    exclude: str | None,
 ) -> None:
     """Print books from directory or ZIP EXPORT_PATH.
 
