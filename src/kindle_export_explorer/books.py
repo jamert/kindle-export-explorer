@@ -52,10 +52,12 @@ class BooksSelector:
 
     show_default: bool = False
     show_samples: bool = False
-    format: str = "kindle"
+    format: str = "kindle"  # TODO: introduce enum
     included: frozenset[str] = frozenset()
     excluded: frozenset[str] = frozenset()
-    has_include: bool = False
+    has_include: bool = (
+        False  # TODO: looks awkward, should be combined with include/exclude
+    )
 
     def __post_init__(self) -> None:
         if self.format not in {"kindle", "print", "all"}:
@@ -72,6 +74,8 @@ class BooksSelector:
         excluded: set[str] | None,
     ) -> BooksSelector:
         """Build a selector, including the CLI's explicit-include override."""
+        # if --include flag is provided, we mostly ignore other filter settings
+        # TODO: move this logic to constructor instead of having it only in staticmethod
         explicit = included is not None
         return cls(
             show_default=show_default or explicit,
