@@ -308,54 +308,13 @@ def _assemble_source_records(
     *,
     selector: BooksSelector,
 ) -> SourceRecordCatalog:
-    catalog = SourceRecordCatalog(selector)
     files = ExportFiles(root)
     _raise_if_book_files_missing(files)
 
+    catalog = SourceRecordCatalog(selector)
+
     # Digital ownership is the broadest source for Kindle books and samples.
-    ownership_files = files.named("Digital.Content.Ownership", ".json")
-    for path in ownership_files:
-        try:
-            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
-            if not isinstance(value, dict):
-                raise TypeError("expected a JSON object")
-            data = cast(dict[str, object], value)
-            resource_value = data.get("resource", {})
-            if not isinstance(resource_value, dict):
-                raise TypeError("resource must be an object")
-            resource = cast(dict[str, object], resource_value)
-        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
-            raise ExportError(f"cannot read {path}: {exc}") from exc
-        asin = _clean_identifier(resource.get("ASIN"))
-        if not selector.source_dict(resource):
-            continue
-        rights_value = data.get("rights", [])
-        rights_items = (
-            cast(list[object], rights_value) if isinstance(rights_value, list) else []
-        )
-        rights = [
-            cast(dict[str, object], right)
-            for right in rights_items
-            if isinstance(right, dict)
-        ]
-        origins: set[str] = set()
-        for right in rights:
-            origin_value = right.get("origin")
-            if isinstance(origin_value, dict):
-                origin = cast(dict[str, object], origin_value)
-                origins.add(clean(origin.get("originType")).casefold())
-        is_sample_resource = (
-            clean(resource.get("resourceType")).casefold() == "kindleebooksample"
-            or "sample" in origins
-        )
-        book = catalog.kindle(
-            asin,
-            title=resource.get("Product Name"),
-            sample=is_sample_resource,
-        )
-        if book:
-            book.metadata.set_title(resource.get("Product Name"), 30)
-            book.default = book.default or bool(origins & _DEFAULT_ORIGIN_TYPES)
+    _process_digital_ownership_records(files, selector, catalog)
 
     # Category filtering can now remove most source records before any of the
     # metadata-only relations are read. Known Kindle keys remain available so a
@@ -519,6 +478,56 @@ def _raise_if_book_files_missing(files: ExportFiles) -> None:
     )
     if not any(required_files):
         raise ExportError(f"no recognized Kindle export files found in {files.source}")
+
+
+def _process_digital_ownership_records(
+    files: ExportFiles,
+    selector: BooksSelector,
+    catalog: SourceRecordCatalog,
+) -> None:
+    ownership_files = files.named("Digital.Content.Ownership", suffix=".json")
+    for path in ownership_files:
+        try:
+            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
+            if not isinstance(value, dict):
+                raise TypeError("expected a JSON object")
+            data = cast(dict[str, object], value)
+            resource_value = data.get("resource", {})
+            if not isinstance(resource_value, dict):
+                raise TypeError("resource must be an object")
+            resource = cast(dict[str, object], resource_value)
+        except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
+            raise ExportError(f"cannot read {path}: {exc}") from exc
+        asin = _clean_identifier(resource.get("ASIN"))
+        if not selector.source_dict(resource):
+            continue
+        rights_value = data.get("rights", [])
+        rights_items = (
+            cast(list[object], rights_value) if isinstance(rights_value, list) else []
+        )
+        rights = [
+            cast(dict[str, object], right)
+            for right in rights_items
+            if isinstance(right, dict)
+        ]
+        origins: set[str] = set()
+        for right in rights:
+            origin_value = right.get("origin")
+            if isinstance(origin_value, dict):
+                origin = cast(dict[str, object], origin_value)
+                origins.add(clean(origin.get("originType")).casefold())
+        is_sample_resource = (
+            clean(resource.get("resourceType")).casefold() == "kindleebooksample"
+            or "sample" in origins
+        )
+        book = catalog.kindle(
+            asin,
+            title=resource.get("Product Name"),
+            sample=is_sample_resource,
+        )
+        if book:
+            book.metadata.set_title(resource.get("Product Name"), 30)
+            book.default = book.default or bool(origins & _DEFAULT_ORIGIN_TYPES)
 
 
 # Canonical conversion
