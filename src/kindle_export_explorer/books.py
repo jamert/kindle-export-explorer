@@ -467,6 +467,28 @@ def _process_digital_ownership_records(
         catalog.put_digital_content_ownership_record(record)
 
 
+@dataclass(frozen=True, slots=True)
+class CustomerRelationshipIndexSourceRecord:
+    asin: str
+    product_name: str
+    resource_type: str
+    ownership_type: str
+    sortable_title: str
+    sortable_author_name: str
+    marketplace: str
+    series_title: str
+    position_in_collection: str
+
+    def is_owned_item(self) -> bool:
+        return self.resource_type == "ITEM" and self.ownership_type in {
+            "Item Owner",
+            "Sample Owner",
+        }
+
+    def is_sample(self) -> bool:
+        return self.ownership_type == "Sample Owner"
+
+
 def _process_customer_relationship_index_records(
     files: ExportFiles,
     selector: BooksSelector,
@@ -475,60 +497,23 @@ def _process_customer_relationship_index_records(
     for _, row in _csv_rows(
         files.root,
         files.named("CustomerRelationshipIndex"),
-        selector.source_dict,
     ):
-        if clean(row.get("Resource Type")).casefold() != "item":
+        record = CustomerRelationshipIndexSourceRecord(
+            asin=clean(row.get("ASIN")),
+            product_name=clean(row.get("Product Name")),
+            resource_type=clean(row.get("Resource Type")),
+            ownership_type=clean(row.get("Ownership Type")),
+            sortable_title=clean(row.get("Sortable Title")),
+            sortable_author_name=clean(row.get("Sortable Author Name")),
+            marketplace=clean(row.get("Marketplace")),
+            series_title=clean(row.get("Series Title")),
+            position_in_collection=clean(row.get("Position In Collection")),
+        )
+
+        if not selector.asin(record.asin) or not record.is_owned_item():
             continue
-        ownership_type = clean(row.get("Ownership Type")).casefold()
-        if ownership_type not in _OWNER_TYPES:
-            continue
-        asin = clean(row.get("ASIN"))
-        if ownership_type == "sample owner":
-            sample_record = catalog.kindle(asin, sample=True, create=False)
-            if catalog.has_kindle(asin, sample=True) and sample_record is None:
-                continue
-            full_record = catalog.kindle(asin, create=False)
-            if catalog.has_kindle(asin, sample=False) and full_record is None:
-                continue
-            if full_record is None and not selector.collects_sample_only():
-                continue
-            asin_record = catalog.kindle(
-                asin,
-                title=row.get("Product Name"),
-                sample=True,
-            )
-        else:
-            # ULI repeats Kindle purchases and also contains physical purchases.
-            # Existing digital ownership takes precedence; otherwise this is the
-            # best available evidence for a print record.
-            if catalog.has_kindle(asin, sample=False):
-                asin_record = catalog.kindle(asin, create=False)
-            else:
-                asin_record = catalog.printed(
-                    asin,
-                    title=row.get("Product Name"),
-                )
-        if asin_record:
-            metadata = asin_record.metadata
-            metadata.set_title(row.get("Product Name"), 50)
-            sortable_title = clean(row.get("Sortable Title"))
-            if sortable_title:
-                metadata.sortable_title = sortable_title
-            sortable_author = clean(row.get("Sortable Author Name"))
-            if sortable_author:
-                metadata.sortable_author = sortable_author
-            marketplace = clean(row.get("Marketplace"))
-            if marketplace:
-                metadata.marketplaces.add(marketplace)
-            series_title, series_asin = split_series_title_and_asin(
-                row.get("Series Title")
-            )
-            metadata.set_series(
-                series_title,
-                row.get("Position In Collection"),
-                10,
-                series_asin,
-            )
+
+        catalog.put_customer_relationship_index_record(record)
 
 
 def _process_book_relation_records(
@@ -874,6 +859,54 @@ class SourceRecordCatalog:
         ):
             book.metadata.set_title(record.resource_product_name, 30)
             book.default = book.default or record.is_default()
+
+    def put_customer_relationship_index_record(
+        self,
+        record: CustomerRelationshipIndexSourceRecord,
+    ) -> None:
+        # NOTE: processing relies on the fact that digital content ownership records are already processed
+        #   and kindle records already exists, so we have implicit coupling
+        if record.is_sample():
+            sample_record = self.kindle(record.asin, sample=True, create=False)
+            if self.has_kindle(record.asin, sample=True) and sample_record is None:
+                return
+            full_record = self.kindle(record.asin, create=False)
+            if self.has_kindle(record.asin, sample=False) and full_record is None:
+                return
+            if full_record is None and not self._selector.collects_sample_only():
+                return
+            asin_record = self.kindle(
+                record.asin,
+                title=record.product_name,
+                sample=True,
+            )
+        else:
+            # ULI repeats Kindle purchases and also contains physical purchases.
+            # Existing digital ownership takes precedence; otherwise this is the
+            # best available evidence for a print record.
+            if self.has_kindle(record.asin, sample=False):
+                asin_record = self.kindle(record.asin, create=False)
+            else:
+                asin_record = self.printed(
+                    record.asin,
+                    title=record.product_name,
+                )
+        if asin_record:
+            metadata = asin_record.metadata
+            metadata.set_title(record.product_name, 50)
+            if record.sortable_title:
+                metadata.sortable_title = record.sortable_title
+            if record.sortable_author_name:
+                metadata.sortable_author = record.sortable_author_name
+            if record.marketplace:
+                metadata.marketplaces.add(record.marketplace)
+            series_title, series_asin = split_series_title_and_asin(record.series_title)
+            metadata.set_series(
+                series_title,
+                record.position_in_collection,
+                10,
+                series_asin,
+            )
 
     def kindle(
         self,
