@@ -16,7 +16,6 @@ from zipfile import Path as ZipPath
 from zipfile import ZipFile, is_zipfile
 
 _MISSING = {"", "not available", "not applicable", "null", "none"}
-_DEFAULT_ORIGIN_TYPES = {"kindledictionary", "kindleuserguide"}
 _OWNER_TYPES = {"item owner", "sample owner"}
 _SAMPLE_KIND = "sample"
 _EBOOK_KIND = "ebook"
@@ -465,17 +464,7 @@ def _process_digital_ownership_records(
             content_download_start_date=content_download_start_date,
         )
 
-        # TODO: wrap into source-specific method
-        book = catalog.kindle(
-            asin=record.resource_asin,
-            title=record.resource_product_name,
-            sample=record.is_sample(),
-        )
-        if book:
-            book.metadata.set_title(record.resource_product_name, 30)
-            book.default = book.default or (
-                record.rights_origin_type.casefold() in _DEFAULT_ORIGIN_TYPES
-            )
+        catalog.put_digital_content_ownership_record(record)
 
 
 def _process_customer_relationship_index_records(
@@ -873,6 +862,18 @@ class SourceRecordCatalog:
         self._kindle: dict[tuple[str, bool], KindleBookRecord] = {}
         self._print: dict[str, PrintBookRecord] = {}
         self._documents: dict[str, DocumentRecord] = {}
+
+    def put_digital_content_ownership_record(
+        self, record: DigitalContentOwnershipSourceRecord
+    ) -> None:
+        # TODO: store digital_content_ownership record
+        if book := self.kindle(
+            asin=record.resource_asin,
+            title=record.resource_product_name,
+            sample=record.is_sample(),
+        ):
+            book.metadata.set_title(record.resource_product_name, 30)
+            book.default = book.default or record.is_default()
 
     def kindle(
         self,
