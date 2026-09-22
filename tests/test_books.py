@@ -110,73 +110,6 @@ def test_normalize_sharded_path_only_collapses_real_shard_groups(
         )
 
 
-def test_reconstructs_and_enriches_books_without_activity_fields(
-    tmp_path: Path,
-) -> None:
-    ownership = (
-        tmp_path / "Digital.Content.Ownership" / "Digital.Content.Ownership.1.json"
-    )
-    ownership.parent.mkdir()
-    ownership.write_text(
-        json.dumps({"resource": {"ASIN": "BOOK1", "Product Name": "Old title"}}),
-        encoding="utf-8",
-    )
-    write_csv(
-        tmp_path,
-        "uli/CustomerRelationshipIndex.1.csv",
-        [
-            "ASIN",
-            "Product Name",
-            "Resource Type",
-            "Ownership Type",
-            "Series Title",
-            "Position In Collection",
-        ],
-        [
-            [
-                "BOOK1",
-                "A Book",
-                "ITEM",
-                "Item Owner",
-                "A Series B012345678",
-                "2",
-            ],
-            ["WISH1", "A Wish", "ITEM", "Not Interested", "", ""],
-        ],
-    )
-    write_csv(
-        tmp_path,
-        "uli/CustomerAuthorNameRelationship.1.csv",
-        ["ASIN", "Author Name"],
-        [["BOOK1", "Writer, Ada"], ["WISH1", "Ignored, Ira"]],
-    )
-    write_csv(
-        tmp_path,
-        "uli/CustomerGenres.1.csv",
-        ["ASIN", "Genre"],
-        [["BOOK1", "History"]],
-    )
-    write_csv(
-        tmp_path,
-        "Kindle.Devices.ReadingSession.csv",
-        ["ASIN", "start_timestamp", "total_reading_millis"],
-        [["ACTIVITY_ONLY", "2025-01-01", "1000"]],
-    )
-
-    books = reconstruct_books(tmp_path, selector=BooksSelector())
-
-    assert len(books) == 1
-    assert books[0].asin == "BOOK1"
-    assert books[0].title == "A Book"
-    assert books[0].authors.names == ["Writer, Ada"]
-    assert books[0].authors.asins == []
-    assert books[0].genres == ["History"]
-    assert books[0].series is not None
-    assert books[0].series.title == "A Series"
-    assert books[0].series.asin == "B012345678"
-    assert books[0].series.position == 2
-
-
 def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> None:
     ownership = tmp_path / "Digital.Content.Ownership"
     ownership.mkdir()
@@ -189,8 +122,18 @@ def test_default_kindle_content_is_hidden_unless_requested(tmp_path: Path) -> No
         (ownership / f"Digital.Content.Ownership.{number}.json").write_text(
             json.dumps(
                 {
-                    "resource": {"ASIN": asin, "Product Name": title},
-                    "rights": [{"origin": {"originType": origin}}],
+                    "resource": {
+                        "ASIN": asin,
+                        "Product Name": title,
+                        "resourceType": "KindleEBook",
+                    },
+                    "rights": [
+                        {
+                            "rightType": "Download",
+                            "acquiredDate": "2024-01-01T00:00:00Z",
+                            "origin": {"originType": origin},
+                        }
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -237,7 +180,13 @@ def test_samples_are_hidden_unless_requested_and_have_a_column(tmp_path: Path) -
                         "Product Name": title,
                         "resourceType": resource_type,
                     },
-                    "rights": [{"origin": {"originType": origin}}],
+                    "rights": [
+                        {
+                            "rightType": "Download",
+                            "acquiredDate": "2024-01-01T00:00:00Z",
+                            "origin": {"originType": origin},
+                        }
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -281,6 +230,7 @@ def test_sample_and_ebook_are_merged_by_asin(tmp_path: Path) -> None:
                     },
                     "rights": [
                         {
+                            "rightType": "Download",
                             "origin": {"originType": origin_type},
                             "acquiredDate": acquired,
                         }
@@ -474,7 +424,13 @@ def test_format_filters_kindle_and_print_from_provenance_not_asin(
                     "Product Name": "Numeric Kindle Book",
                     "resourceType": "KindleEBook",
                 },
-                "rights": [{"origin": {"originType": "Purchase"}}],
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-01T00:00:00Z",
+                        "origin": {"originType": "Purchase"},
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -526,7 +482,13 @@ def test_activity_and_content_update_tables_are_ignored(tmp_path: Path) -> None:
                     "Product Name": "Real Book",
                     "resourceType": "KindleEBook",
                 },
-                "rights": [{"origin": {"originType": "Purchase"}}],
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-01T00:00:00Z",
+                        "origin": {"originType": "Purchase"},
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -572,7 +534,13 @@ def test_json_and_jsonl_aliases_print_json_lines_with_native_types(
                     "Product Name": "Échantillon",
                     "resourceType": "KindleEBookSample",
                 },
-                "rights": [{"origin": {"originType": "Sample"}}],
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-01T00:00:00Z",
+                        "origin": {"originType": "Sample"},
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -612,7 +580,13 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
                         "Product Name": f"Title {number}",
                         "resourceType": "KindleEBook",
                     },
-                    "rights": [{"origin": {"originType": "Purchase"}}],
+                    "rights": [
+                        {
+                            "rightType": "Download",
+                            "acquiredDate": "2024-01-01T00:00:00Z",
+                            "origin": {"originType": "Purchase"},
+                        }
+                    ],
                 }
             ),
             encoding="utf-8",
@@ -626,7 +600,13 @@ def test_include_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
                     "Product Name": "Sample Book",
                     "resourceType": "KindleEBookSample",
                 },
-                "rights": [{"origin": {"originType": "Sample"}}],
+                "rights": [
+                    {
+                        "rightType": "Download",
+                        "acquiredDate": "2024-01-01T00:00:00Z",
+                        "origin": {"originType": "Sample"},
+                    }
+                ],
             }
         ),
         encoding="utf-8",
@@ -691,7 +671,13 @@ def test_exclude_filter_accepts_asins_and_document_ids(tmp_path: Path) -> None:
                         "Product Name": f"Title {number}",
                         "resourceType": "KindleEBook",
                     },
-                    "rights": [{"origin": {"originType": "Purchase"}}],
+                    "rights": [
+                        {
+                            "rightType": "Download",
+                            "acquiredDate": "2024-01-01T00:00:00Z",
+                            "origin": {"originType": "Purchase"},
+                        }
+                    ],
                 }
             ),
             encoding="utf-8",

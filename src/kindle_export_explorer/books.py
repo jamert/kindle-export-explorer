@@ -86,6 +86,27 @@ class BooksSelector:
             has_include=explicit,
         )
 
+    def asin(self, value: str | None) -> bool:
+        """
+        Method to check if ASIN is not filtered; intentionally takes only value itself
+        to avoid tying to specific record structure
+        """
+        identifier = value.casefold() if value else ""
+        return (
+            bool(identifier)
+            and not (
+                self.has_include
+                and (
+                    identifier not in self.included
+                    and f"asin:{identifier}" not in self.included
+                )
+            )
+            and (
+                identifier not in self.excluded
+                and f"asin:{identifier}" not in self.excluded
+            )
+        )
+
     def key(self, key: CanonicalKey) -> bool:
         identifiers = {
             value.casefold() for value in (str(key), key.asin, key.document_id) if value
@@ -358,58 +379,100 @@ def _raise_if_book_files_missing(files: ExportFiles) -> None:
         raise ExportError(f"no recognized Kindle export files found in {files.source}")
 
 
+@dataclass(frozen=True, slots=True)
+class DigitalContentOwnershipSourceRecord:
+    resource_asin: str
+    resource_type: str
+    resource_product_name: str
+    rights_acquired_date: str  # TODO: timestamp
+    rights_origin_type: str
+    content_download_start_date: str | None  # TODO: timestamp
+
+    def is_sample(self) -> bool:
+        return (
+            self.resource_type == "KindleEBookSample"
+            or self.rights_origin_type == "Sample"
+        )
+
+
 def _process_digital_ownership_records(
     files: ExportFiles,
     selector: BooksSelector,
     catalog: SourceRecordCatalog,
 ) -> None:
+    """
+    Relevant fields:
+    `resource.ASIN`
+    `resource.resourceType` -> KindleEBook", "KindleEBookSample", "KindlePDoc" (personal document)
+    `resource.Product Name` -> book name, repeated in other files
+    `rights[].rightType` -> we only need "Download", because it has more information than corresponding "Lending"
+      in my data, there was no case where I had Lending but didn't have Download
+    `rights[].acquiredDate`
+    `rights[].origin.originType` -> allows to separate purchases from default kindle items (and sample)
+    `rights[].consumptions[].resourceItemType -> filter on "Content"; the records is optional
+    `rights[].consumptions[].startDate` -> possible date when buyer engaged with the content (downloaded)
+    """
     ownership_files = files.named("Digital.Content.Ownership", suffix=".json")
     for path in ownership_files:
         try:
-            value = cast(object, json.loads(path.read_text(encoding="utf-8-sig")))
-            if not isinstance(value, dict):
-                raise TypeError("expected a JSON object")
-            data = cast(dict[str, object], value)
-            resource_value = data.get("resource", {})
-            if not isinstance(resource_value, dict):
-                raise TypeError("resource must be an object")
-            resource = cast(dict[str, object], resource_value)
+            source_dict = cast(
+                dict[str, object], json.loads(path.read_text(encoding="utf-8-sig"))
+            )
         except (OSError, UnicodeError, json.JSONDecodeError, AttributeError) as exc:
             raise ExportError(f"cannot read {path}: {exc}") from exc
 
-        if not selector.source_dict(resource):
+        resource = cast(dict[str, str], source_dict.get("resource", {}))
+        if not selector.asin(
+            resource.get("ASIN")
+        ):  # NOTE: may filter Personal Documents
             continue
 
-        rights_value = data.get("rights", [])
-        rights_items = (
-            cast(list[object], rights_value) if isinstance(rights_value, list) else []
-        )
-        rights = [
-            cast(dict[str, object], right)
-            for right in rights_items
-            if isinstance(right, dict)
+        # NOTE: data-based assumption that record always have at least one 'Download' right
+        download_rights = [
+            right
+            for right in cast(
+                list[dict[str, object]], source_dict.get("rights", [])
+            )  # always non-empty in practice
+            if right.get("rightType") == "Download"
         ]
+        if not download_rights:
+            continue  # no useful data then  TODO: register in filter
+        download_right = download_rights[0]
 
-        origins: set[str] = set()
-        for right in rights:
-            origin_value = right.get("origin")
-            if isinstance(origin_value, dict):
-                origin = cast(dict[str, object], origin_value)
-                origins.add(clean(origin.get("originType")).casefold())
+        content_download_start_date: str | None = None
+        if content_consumptions := [
+            consumption
+            for consumption in cast(
+                list[dict[str, str]], download_right.get("consumptions", {})
+            )
+            if consumption["resourceItemType"] == "Content"
+        ]:
+            content_download_start_date = content_consumptions[0]["startDate"]
 
-        is_sample_resource = (
-            clean(resource.get("resourceType")).casefold() == "kindleebooksample"
-            or "sample" in origins
+        record = DigitalContentOwnershipSourceRecord(
+            resource_asin=resource["ASIN"],
+            resource_type=resource["resourceType"],
+            resource_product_name=resource.get(
+                "Product Name", ""
+            ),  # TODO: ignore records without valid product name
+            rights_acquired_date=cast(str, download_right["acquiredDate"]),
+            rights_origin_type=cast(dict[str, str], download_right["origin"]).get(
+                "originType", ""
+            ),  # TODO: needs to be cleaned up
+            content_download_start_date=content_download_start_date,
         )
 
+        # TODO: wrap into source-specific method
         book = catalog.kindle(
-            asin=_clean_identifier(resource.get("ASIN")),
-            title=resource.get("Product Name"),
-            sample=is_sample_resource,
+            asin=record.resource_asin,
+            title=record.resource_product_name,
+            sample=record.is_sample(),
         )
         if book:
-            book.metadata.set_title(resource.get("Product Name"), 30)
-            book.default = book.default or bool(origins & _DEFAULT_ORIGIN_TYPES)
+            book.metadata.set_title(record.resource_product_name, 30)
+            book.default = book.default or (
+                record.rights_origin_type.casefold() in _DEFAULT_ORIGIN_TYPES
+            )
 
 
 def _process_customer_relationship_index_records(
