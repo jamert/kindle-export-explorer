@@ -394,6 +394,9 @@ class DigitalContentOwnershipSourceRecord:
             or self.rights_origin_type == "Sample"
         )
 
+    def is_default(self) -> bool:
+        return self.rights_origin_type in ("KindleDictionary", "KindleUserGuide")
+
 
 def _process_digital_ownership_records(
     files: ExportFiles,
