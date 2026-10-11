@@ -153,7 +153,7 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
     runner = CliRunner()
     tsv_result = runner.invoke(
         main,
-        ["--acquisition", "--source", "all", str(tmp_path)],
+        ["--acquisition", "--format", "all", str(tmp_path)],
     )
     assert tsv_result.exit_code == 0
     tsv_rows = {
@@ -167,7 +167,7 @@ def test_reconstructs_kindle_print_and_document_acquisition_timelines(
 
     json_result = runner.invoke(
         main,
-        ["--acquisition", "--jsonl", "--source", "all", str(tmp_path)],
+        ["--acquisition", "--jsonl", "--format", "all", str(tmp_path)],
     )
     assert json_result.exit_code == 0
     json_rows = {

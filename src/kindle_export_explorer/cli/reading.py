@@ -10,7 +10,7 @@ from typing import Any
 
 import click
 
-from ..books import CanonicalKey, ExportError, reconstruct_books
+from ..books import BooksSelector, CanonicalKey, ExportError, reconstruct_books
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..reading import BookReading, reconstruct_reading
@@ -58,11 +58,14 @@ def reading(canonical_key: str, export_path: Path | None) -> None:
             iter(
                 reconstruct_books(
                     export_path,
-                    show_default=True,
-                    show_samples=True,
-                    source="all",
-                    predicate=predicate,
-                )
+                    selector=BooksSelector(
+                        show_default=True,
+                        show_samples=True,
+                        format="all",
+                        included=frozenset({str(key).casefold()}),
+                        has_include=True,
+                    ),
+                ),
             ),
             None,
         )
@@ -76,7 +79,7 @@ def reading(canonical_key: str, export_path: Path | None) -> None:
             _reading_as_dict(reading, book.title if book else None),
             ensure_ascii=False,
             default=_json_default,
-        )
+        ),
     )
 
 

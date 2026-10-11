@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 
 from ..acquisitions import BookAcquisition, reconstruct_acquisitions
-from ..books import BookCanonical, ExportError, reconstruct_books
+from ..books import BookCanonical, BooksSelector, ExportError, reconstruct_books
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
 from ..resolutions import (
@@ -18,7 +18,7 @@ from ..resolutions import (
     load_resolutions,
     save_resolutions,
 )
-from .utils import identifier_predicate, keys_predicate, parse_identifiers
+from .utils import keys_predicate, parse_identifiers
 
 _RESPONSES = {
     "y": ReadStatus.YES,
@@ -67,18 +67,17 @@ def resolve_reading(
         raise click.UsageError(str(exc)) from exc
     included_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
-    predicate = identifier_predicate(included_ids, excluded_ids)
+    selector = BooksSelector(
+        show_default=included_ids is not None,
+        show_samples=included_ids is not None,
+        format="kindle",
+        included=frozenset(included_ids or ()),
+        excluded=frozenset(excluded_ids or ()),
+        has_include=included_ids is not None,
+    )
 
     try:
-        books = reconstruct_books(
-            export_path,
-            # Dictionaries, guides, and sample-only records are not full books.
-            # Explicit identifiers can still request either category.
-            show_default=included_ids is not None,
-            show_samples=included_ids is not None,
-            source="kindle",
-            predicate=predicate,
-        )
+        books = reconstruct_books(export_path, selector=selector)
         selected_keys = {book.key for book in books}
         acquisitions = {
             acquisition.key: acquisition

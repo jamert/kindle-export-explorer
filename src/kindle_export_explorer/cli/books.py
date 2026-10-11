@@ -14,15 +14,16 @@ from ..books import (
     EXTRA_HEADERS,
     HEADERS,
     BookCanonical,
+    BooksSelector,
     CanonicalKey,
     ExportError,
     reconstruct_books,
 )
 from ..formatting import format_datetime
 from ..paths import resolve_export_path
-from .utils import identifier_predicate, keys_predicate, parse_identifiers
+from .utils import keys_predicate, parse_identifiers
 
-_ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
+__all__ = ["books"]
 
 
 # Command overview
@@ -36,11 +37,21 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
 )
 @click.option("--show-samples", is_flag=True, help="Include book samples.")
 @click.option(
-    "--source",
+    "--format",
     type=click.Choice(["kindle", "print", "all"], case_sensitive=False),
     default="kindle",
     show_default=True,
-    help="Select books by ownership source.",
+    help="Select books by format.",
+)
+@click.option(
+    "--include",
+    metavar="ID[,ID...]",
+    help="Only emit records matching these comma-separated keys, ASINs, or document IDs.",
+)
+@click.option(
+    "--exclude",
+    metavar="ID[,ID...]",
+    help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
 )
 @click.option(
     "--extra",
@@ -59,16 +70,6 @@ _ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
     is_flag=True,
     help="Write one JSON object per line instead of TSV.",
 )
-@click.option(
-    "--include",
-    metavar="ID[,ID...]",
-    help="Only emit records matching these comma-separated keys, ASINs, or document IDs.",
-)
-@click.option(
-    "--exclude",
-    metavar="ID[,ID...]",
-    help="Omit records matching these comma-separated keys, ASINs, or document IDs.",
-)
 @click.argument(
     "export_path",
     required=False,
@@ -78,12 +79,12 @@ def books(
     export_path: Path | None,
     show_default: bool,
     show_samples: bool,
-    source: str,
+    format: str,
+    include: str | None,
+    exclude: str | None,
     extra: bool,
     acquisition: bool,
     json_lines: bool,
-    include: str | None,
-    exclude: str | None,
 ) -> None:
     """Print books from directory or ZIP EXPORT_PATH.
 
@@ -95,18 +96,16 @@ def books(
         raise click.UsageError(str(exc)) from exc
     requested_ids = parse_identifiers(include, "--include")
     excluded_ids = parse_identifiers(exclude, "--exclude")
-    predicate = identifier_predicate(requested_ids, excluded_ids)
+    selector = BooksSelector.from_cli(
+        show_default=show_default,
+        show_samples=show_samples,
+        format=format,
+        included=requested_ids,
+        excluded=excluded_ids,
+    )
 
     try:
-        books = reconstruct_books(
-            export_path,
-            # Explicit IDs override all category filters. Exclusion is part of
-            # the predicate and therefore still always wins.
-            show_default=True if requested_ids is not None else show_default,
-            show_samples=True if requested_ids is not None else show_samples,
-            source="all" if requested_ids is not None else source,
-            predicate=predicate,
-        )
+        books = reconstruct_books(export_path, selector=selector)
         acquisition_by_key = (
             {
                 item.key: item
@@ -142,6 +141,9 @@ def _write_json_lines(
         click.echo(json.dumps(record, ensure_ascii=False))
 
 
+_ACQUISITION_HEADERS = ("acquired_sample", "acquired_book")
+
+
 def _write_tsv(
     books: list[BookCanonical],
     extra: bool,
@@ -169,6 +171,3 @@ def _acquisition_values(
         else None,
         "acquired_book": format_datetime(acquired_book) if acquired_book else None,
     }
-
-
-__all__ = ["books"]
